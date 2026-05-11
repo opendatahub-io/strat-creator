@@ -1119,6 +1119,7 @@ name = "strat-creator"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "certifi" },
     { name = "pyyaml" },
 ]
 
@@ -1129,7 +1130,10 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "pyyaml" }]
+requires-dist = [
+    { name = "certifi" },
+    { name = "pyyaml" },
+]
 
 [package.metadata.requires-dev]
 dev = [

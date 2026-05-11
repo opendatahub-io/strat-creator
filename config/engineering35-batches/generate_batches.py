@@ -1,11 +1,19 @@
 #!/usr/bin/env python3
 import json
 import os
+import ssl
 import urllib.request
 import urllib.error
 import base64
 import math
 import sys
+
+ssl_ctx = ssl.create_default_context()
+try:
+    import certifi
+    ssl_ctx.load_verify_locations(certifi.where())
+except (ImportError, OSError):
+    pass
 
 JIRA_SERVER = os.environ["JIRA_SERVER"]
 JIRA_USER = os.environ["JIRA_USER"]
@@ -129,7 +137,7 @@ def fetch_rfe(rfe_num):
         "Accept": "application/json",
     })
     try:
-        with urllib.request.urlopen(req) as resp:
+        with urllib.request.urlopen(req, timeout=60, context=ssl_ctx) as resp:
             data = json.loads(resp.read())
         fields = data["fields"]
         return {

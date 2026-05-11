@@ -32,7 +32,8 @@ import subprocess
 import sys
 import urllib.request
 
-from jira_utils import require_env, get_issue, get_comments, adf_to_markdown
+from jira_utils import (require_env, get_issue, get_comments, adf_to_markdown,
+                        ssl_ctx)
 
 
 MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024  # 10 MB
@@ -94,7 +95,7 @@ def _download_attachment(url, dest_path, user, token):
         "Authorization": f"Basic {credentials}",
     }
     req = urllib.request.Request(url, headers=headers)
-    with urllib.request.urlopen(req, timeout=60) as resp:
+    with urllib.request.urlopen(req, timeout=60, context=ssl_ctx) as resp:
         with open(dest_path, "wb") as f:
             f.write(resp.read())
 
