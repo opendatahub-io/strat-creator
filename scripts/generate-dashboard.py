@@ -563,7 +563,7 @@ def compute_deltas(runs):
     for i, run in enumerate(runs):
         cumulative += run["reviewed"]
         run["cumulative_reviewed"] = cumulative
-        cost = run.get("cost", {})
+        cost = run.get("cost") or {}
         cumulative_cost += cost.get("total_usd", 0)
         run["cumulative_cost"] = round(cumulative_cost, 2)
         if i == 0:
