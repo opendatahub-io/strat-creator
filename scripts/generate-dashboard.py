@@ -488,8 +488,18 @@ def load_run_from_json(run_dir, config):
                         if stats.get("dimensions") else 0,
         "strategies": strategies,
         "skipped": data.get("skipped", []),
-        "dry_run": data.get("dry_run", True),
+        "dry_run": data.get("dry_run", False),
+        "cost": data.get("cost"),
     }
+
+
+def load_cost_backfill(data_dir):
+    """Load historical cost data keyed by run_id."""
+    path = os.path.join(data_dir, "cost-backfill.json")
+    if os.path.exists(path):
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    return {}
 
 
 def scan_all_runs(data_dir, config, max_runs=None):
@@ -500,6 +510,8 @@ def scan_all_runs(data_dir, config, max_runs=None):
     current_link = os.path.join(data_dir, "current")
     if os.path.islink(current_link):
         current_target = os.readlink(current_link)
+
+    cost_backfill = load_cost_backfill(data_dir)
 
     for entry in sorted(os.listdir(data_dir)):
         entry_path = os.path.join(data_dir, entry)
@@ -523,7 +535,17 @@ def scan_all_runs(data_dir, config, max_runs=None):
         stats["timestamp"] = ts.isoformat()
         stats["label"] = ts.strftime("%b %d, %Y %H:%M")
         stats["is_current"] = (entry == current_target)
-        stats.setdefault("dry_run", True)
+        # Skip runs explicitly marked as dry
+        if stats.get("dry_run") is True:
+            print(f"    Skipped (dry run)")
+            continue
+
+        # Attach cost data from pipeline-data.json or backfill
+        if "cost" not in stats:
+            cost = cost_backfill.get(entry)
+            if cost:
+                stats["cost"] = cost
+
         runs.append(stats)
 
     # Sort chronologically (oldest first) and cap if requested
@@ -537,9 +559,13 @@ def scan_all_runs(data_dir, config, max_runs=None):
 def compute_deltas(runs):
     """Add delta fields comparing each run to its predecessor."""
     cumulative = 0
+    cumulative_cost = 0.0
     for i, run in enumerate(runs):
         cumulative += run["reviewed"]
         run["cumulative_reviewed"] = cumulative
+        cost = run.get("cost", {})
+        cumulative_cost += cost.get("total_usd", 0)
+        run["cumulative_cost"] = round(cumulative_cost, 2)
         if i == 0:
             run["delta_approval"] = None
             run["delta_revision"] = None
@@ -858,7 +884,7 @@ tr.clickable {{ cursor: pointer; }}
         Each dimension is scored 0–2. Total: 8 points. Verdicts are <strong style="color:#c9d1d9">deterministic</strong> — computed from scores by code, not LLM judgment.
         <br>
         <strong style="color:#c9d1d9">Verdict rules:</strong> APPROVE (≥6, no zeros) auto-passes. REVISE and REJECT get <code style="background:#21262d;padding:2px 6px;border-radius:3px">needs-attention</code> for human review.
-        <span id="mode-text">Production runs — data written to Jira.</span>
+        Production runs — data written to Jira.
     </div>
 </div>
 
@@ -872,10 +898,12 @@ tr.clickable {{ cursor: pointer; }}
     <div class="nav-tab" onclick="switchPage('processing')">Currently Processing</div>
     <div class="nav-tab" onclick="switchPage('pipeline')">Pipeline</div>
 </div>
-<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:#8b949e;padding:8px 16px;background:#161b22;border:1px solid #30363d;border-radius:6px;user-select:none;white-space:nowrap">
-    <input type="checkbox" id="include-dry-runs" onchange="toggleDryRuns()" style="accent-color:#58a6ff;cursor:pointer">
-    Include dry runs
-</label>
+<select id="time-range" onchange="applyTimeRange()" style="font-size:13px;color:#c9d1d9;background:#161b22;border:1px solid #30363d;border-radius:6px;padding:8px 12px;cursor:pointer">
+    <option value="0">All time</option>
+    <option value="10" selected>Last 10 days</option>
+    <option value="20">Last 20 days</option>
+    <option value="30">Last 30 days</option>
+</select>
 </div>
 
 <!-- ═══ EXECUTIVE SUMMARY PAGE ═══ -->
@@ -903,14 +931,24 @@ tr.clickable {{ cursor: pointer; }}
         <canvas id="chart-dimensions"></canvas>
     </div>
     <div class="chart-card">
-        <h3>First-Pass Quality Score</h3>
-        <p style="color:#6e7681;font-size:12px;margin-bottom:8px">% of all dimension checks (feasibility, testability, scope, architecture) that pass per run.</p>
-        <canvas id="chart-quality"></canvas>
+        <h3>Cumulative Strategies</h3>
+        <p style="color:#6e7681;font-size:12px;margin-bottom:8px">Total strategies reviewed over time (running sum across pipeline runs).</p>
+        <canvas id="chart-cumulative"></canvas>
     </div>
     <div class="chart-card">
         <h3>Average Score Trend</h3>
         <p style="color:#6e7681;font-size:12px;margin-bottom:8px">Mean total score per run (0-8). Threshold for approval: 6/8.</p>
         <canvas id="chart-avg-score"></canvas>
+    </div>
+    <div class="chart-card">
+        <h3>Cost Per Run</h3>
+        <p style="color:#6e7681;font-size:12px;margin-bottom:8px">Total USD per run, broken down by phase (create / refine / review).</p>
+        <canvas id="chart-cost"></canvas>
+    </div>
+    <div class="chart-card">
+        <h3>Cost Per Strategy</h3>
+        <p style="color:#6e7681;font-size:12px;margin-bottom:8px">Average cost per strategy. Lower is better.</p>
+        <canvas id="chart-cost-per-strat"></canvas>
     </div>
 </div>
 
@@ -1108,8 +1146,15 @@ graph LR
 const ALL_RUNS = {runs_json};
 const JIRA_COUNTS = {jira_counts_json};
 const PROCESSING_ISSUES = {processing_json};
-let RUNS = ALL_RUNS.filter(r => !r.dry_run);
+let RUNS = filterByDays(ALL_RUNS, 10);
 let EXEC = recomputeExec(RUNS);
+
+function filterByDays(runs, days) {{
+    if (!days) return [...runs];
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - days);
+    return runs.filter(r => new Date(r.timestamp) >= cutoff);
+}}
 
 // ─── Dry-run filtering ─────────────────────────────────────────────────────
 function recomputeExec(runs) {{
@@ -1171,16 +1216,10 @@ function recomputeExec(runs) {{
     }};
 }}
 
-function toggleDryRuns() {{
-    const checked = document.getElementById('include-dry-runs').checked;
-    RUNS = checked ? [...ALL_RUNS] : ALL_RUNS.filter(r => !r.dry_run);
+function applyTimeRange() {{
+    const days = parseInt(document.getElementById('time-range').value);
+    RUNS = filterByDays(ALL_RUNS, days);
     EXEC = recomputeExec(RUNS);
-    const modeEl = document.getElementById('mode-text');
-    if (modeEl) {{
-        modeEl.innerHTML = checked
-            ? 'Showing <strong style="color:#c9d1d9">all runs</strong> including dry runs — dry runs do not write to Jira.'
-            : 'Production runs — data written to Jira.';
-    }}
     renderExecutiveSummary();
     renderOverviewKPIs();
     renderAttention();
@@ -1196,6 +1235,11 @@ function switchPage(page) {{
     document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
     document.getElementById('page-' + page).classList.add('active');
     event.target.classList.add('active');
+    // Chart.js can't size canvases in hidden containers; trigger resize on show
+    document.querySelectorAll('#page-' + page + ' canvas').forEach(c => {{
+        const chart = Chart.getChart(c);
+        if (chart) chart.resize();
+    }});
 }}
 
 function showRunDetail(idx) {{
@@ -1235,19 +1279,24 @@ function renderOverviewKPIs() {{
     const weakRate = cur ? cur.weakest_rate || 0 : 0;
     const strongDim = cur ? cur.strongest_dim || '—' : '—';
     const strongRate = cur ? cur.strongest_rate || 0 : 0;
+    const costedRuns = RUNS.filter(r => r.cost && r.cost.total_usd > 0);
+    const totalSpend = costedRuns.reduce((s, r) => s + r.cost.total_usd, 0);
+    const totalStrats = costedRuns.reduce((s, r) => s + r.reviewed, 0);
+    const avgPerStrat = totalStrats > 0 ? (totalSpend / totalStrats).toFixed(2) : '—';
 
     let html = `<div class="hero">
         <div class="hero-statement" style="color:${{heroColor}}">${{cur ? cur.approved : 0}} of ${{cur ? cur.reviewed : 0}} strategies approved (${{rate}}%)</div>
         <div class="hero-delta">vs previous run: ${{deltaArrow}}</div>
         <div class="hero-sub">${{RUNS.length}} pipeline run(s) | Latest: ${{cur ? cur.label : 'none'}}</div>
     </div>`;
-    html += `<div class="kpi-grid" style="grid-template-columns: repeat(6, 1fr);">
+    html += `<div class="kpi-grid" style="grid-template-columns: repeat(7, 1fr);">
         <div class="kpi"><div class="kpi-value" style="color:#58a6ff">${{RUNS.length}}</div><div class="kpi-label">Pipeline Runs</div><div class="kpi-detail">${{RUNS.reduce((a, r) => a + r.reviewed, 0)}} strategies total</div></div>
         <div class="kpi"><div class="kpi-value" style="color:#f0f6fc">${{cur ? cur.reviewed : 0}}</div><div class="kpi-label">Strategies Reviewed</div><div class="kpi-detail">${{deltaHtml(cur, prev, 'reviewed', false)}}</div></div>
         <div class="kpi"><div class="kpi-value" style="color:${{heroColor}}">${{rate}}%</div><div class="kpi-label">Approval Rate</div><div class="kpi-detail">${{deltaHtml(cur, prev, 'approval_rate', true)}}</div></div>
         <div class="kpi"><div class="kpi-value" style="color:${{healthColor(avgScorePct)}}">${{avgScoreHtml}}</div><div class="kpi-label">Avg Score</div><div class="kpi-detail">Rubric: F+T+S+A (0-2 each)</div></div>
         <div class="kpi"><div class="kpi-value" style="color:#f85149">${{cur ? cur.needs_attention || 0 : 0}}</div><div class="kpi-label">Needs Attention</div><div class="kpi-detail">${{cur && cur.needs_attention > 0 ? 'Human review required' : 'All clear'}}</div></div>
         <div class="kpi"><div class="kpi-value" style="color:${{healthColor(weakRate)}}">${{weakRate}}%</div><div class="kpi-label">Weakest: ${{weakDim.charAt(0).toUpperCase() + weakDim.slice(1)}}</div><div class="kpi-detail">Strongest: ${{strongDim.charAt(0).toUpperCase() + strongDim.slice(1)}} (${{strongRate}}%)</div></div>
+        <div class="kpi"><div class="kpi-value" style="color:#bc8cff">$${{totalSpend.toFixed(0)}}</div><div class="kpi-label">Total Spend</div><div class="kpi-detail">$${{avgPerStrat}}/strategy (${{costedRuns.length}} runs)</div></div>
     </div>`;
     el.innerHTML = html;
 }}
@@ -1488,6 +1537,7 @@ function renderExecutiveSummary() {{
     const createdSrc = jc ? 'Jira' : '';
     const rubricPass = jc ? jc['strat-creator-rubric-pass'] : e.approved;
     const rubricSrc = jc ? 'Jira' : '';
+    const signedOff = jc ? jc['strat-creator-human-sign-off'] : null;
     const attnCount = jc ? jc['strat-creator-needs-attention'] : e.needs_attention;
     const attnSrc = jc ? 'Jira' : '';
     const heroSub = jc
@@ -1503,10 +1553,15 @@ function renderExecutiveSummary() {{
 
     // KPI cards
     const skippedCount = e.skipped ? e.skipped.length : 0;
-    html += `<div class="kpi-grid" style="grid-template-columns: repeat(6, 1fr)">
+    const signOffCard = signedOff !== null
+        ? `<div class="kpi"><div class="kpi-value" style="color:#bc8cff">${{signedOff}}</div><div class="kpi-label">Human Sign-Off${{srcBadge('Jira')}}</div><div class="kpi-detail">Staff engineer confirmed</div></div>`
+        : '';
+    const cols = signedOff !== null ? 7 : 6;
+    html += `<div class="kpi-grid" style="grid-template-columns: repeat(${{cols}}, 1fr)">
         <div class="kpi"><div class="kpi-value" style="color:#f0f6fc">${{e.total_rfes}}</div><div class="kpi-label">Total RFEs</div><div class="kpi-detail">${{e.total}} strategies + ${{skippedCount}} skipped<br><span style="color:#6e7681;font-size:0.85em">(One RFE may contain 1+ strategies)</span></div></div>
         <div class="kpi"><div class="kpi-value" style="color:#58a6ff">${{createdCount}}</div><div class="kpi-label">Strategies Created${{srcBadge(createdSrc)}}</div><div class="kpi-detail">${{createdDetail}}</div></div>
         <div class="kpi"><div class="kpi-value" style="color:#3fb950">${{rubricPass}}</div><div class="kpi-label">Rubric Pass${{srcBadge(rubricSrc)}}</div><div class="kpi-detail">${{rubricSrc ? 'CI-approved in Jira' : e.approved + ' approved'}}</div></div>
+        ${{signOffCard}}
         <div class="kpi"><div class="kpi-value" style="color:${{healthColor(avgScorePct)}}">${{avgScoreHtml}}</div><div class="kpi-label">Avg Score</div><div class="kpi-detail">Threshold: 6/8</div></div>
         <div class="kpi"><div class="kpi-value" style="color:${{attnCount > 0 ? '#f85149' : '#3fb950'}}">${{attnCount}}</div><div class="kpi-label">Needs Attention${{srcBadge(attnSrc)}}</div><div class="kpi-detail">${{attnCount === 0 ? 'All clear' : 'Staff engineer review'}}</div></div>
         <div class="kpi"><div class="kpi-value" style="color:${{skippedCount > 0 ? '#d29922' : '#3fb950'}}">${{skippedCount}}</div><div class="kpi-label">Skipped RFEs</div><div class="kpi-detail">${{skippedCount > 0 ? 'Waiting on entry gate' : 'All RFEs processed'}}</div></div>
@@ -1734,11 +1789,8 @@ function buildRunList() {{
         const rate = r.approval_rate;
         const color = rate >= 70 ? '#3fb950' : rate >= 40 ? '#d29922' : '#f85149';
         const bg = rate >= 70 ? '#23302a' : rate >= 40 ? '#2d2400' : '#2d1418';
-        const modeBadge = r.dry_run
-            ? '<span style="background:#1f3a5f;color:#58a6ff;padding:2px 6px;border-radius:3px;font-size:10px;font-weight:600;margin-left:6px">DRY</span>'
-            : '<span style="background:#23302a;color:#3fb950;padding:2px 6px;border-radius:3px;font-size:10px;font-weight:600;margin-left:6px">PROD</span>';
         html += `<div class="run-item" onclick="showRunDetail(${{i}})">
-            <div class="run-date">${{r.label}}${{modeBadge}}</div>
+            <div class="run-date">${{r.label}}</div>
             ${{r.is_current ? '<div class="run-current">current</div>' : ''}}
             <div class="run-count">${{r.reviewed}} strategies</div>
             <div class="run-badge" style="background:${{bg}};color:${{color}}">${{rate}}% approved</div>
@@ -1755,8 +1807,7 @@ function buildRunSelector() {{
         const r = RUNS[i];
         const opt = document.createElement('option');
         opt.value = i;
-        const modeTag = r.dry_run ? '[DRY]' : '[PROD]';
-        opt.textContent = `${{r.label}} ${{modeTag}} — ${{r.approval_rate}}% approved (${{r.reviewed}} strategies)${{r.is_current ? ' [current]' : ''}}`;
+        opt.textContent = `${{r.label}} — ${{r.approval_rate}}% approved (${{r.reviewed}} strategies)${{r.is_current ? ' [current]' : ''}}`;
         sel.appendChild(opt);
     }}
     if (RUNS.length > 0) {{
@@ -1835,7 +1886,10 @@ function renderRunDetail(idx) {{
     const avgScorePct = r.avg_total_score !== null ? Math.round(r.avg_total_score / 8 * 100) : 0;
     const runSkippedAll = r.skipped || [];
     const runSkippedGateCount = runSkippedAll.length;
-    html += `<div class="kpi-grid" style="grid-template-columns: repeat(7, 1fr)">
+    const runCost = r.cost && r.cost.total_usd > 0 ? r.cost : null;
+    const costHtml = runCost ? `$${{runCost.total_usd.toFixed(2)}}` : '—';
+    const costDetail = runCost ? `$${{(runCost.total_usd / (r.reviewed || 1)).toFixed(2)}}/strategy` : 'No cost data';
+    html += `<div class="kpi-grid" style="grid-template-columns: repeat(8, 1fr)">
         <div class="kpi"><div class="kpi-value" style="color:#f0f6fc">${{r.reviewed}}</div><div class="kpi-label">Reviewed</div></div>
         <div class="kpi"><div class="kpi-value" style="color:${{healthColor(r.approval_rate)}}">${{r.approval_rate}}%</div><div class="kpi-label">Approval Rate</div></div>
         <div class="kpi"><div class="kpi-value" style="color:${{healthColor(avgScorePct)}}">${{avgScoreHtml}}</div><div class="kpi-label">Avg Score</div></div>
@@ -1843,6 +1897,7 @@ function renderRunDetail(idx) {{
         <div class="kpi"><div class="kpi-value" style="color:${{healthColor(100-r.revision_rate)}}">${{r.revision_rate}}%</div><div class="kpi-label">Revision Rate</div></div>
         <div class="kpi"><div class="kpi-value" style="color:${{healthColor(r.weakest_rate)}}">${{r.weakest_rate}}%</div><div class="kpi-label">Weakest: ${{r.weakest_dim.charAt(0).toUpperCase()+r.weakest_dim.slice(1)}}</div></div>
         <div class="kpi"><div class="kpi-value" style="color:${{runSkippedGateCount > 0 ? '#d29922' : '#3fb950'}}">${{runSkippedGateCount}}</div><div class="kpi-label">Skipped RFEs</div><div class="kpi-detail">${{runSkippedGateCount > 0 ? 'See details below' : 'All RFEs processed'}}</div></div>
+        <div class="kpi"><div class="kpi-value" style="color:#bc8cff">${{costHtml}}</div><div class="kpi-label">Run Cost</div><div class="kpi-detail">${{costDetail}}</div></div>
     </div>`;
 
     // Two-col: dimension bars + verdict grid
@@ -2129,14 +2184,17 @@ function initCharts() {{
         }},
     }}));
 
-    // First-pass quality score
-    _chartInstances.push(new Chart(document.getElementById('chart-quality'), {{
+    // Cumulative strategies
+    const cumulative = [];
+    let cumSum = 0;
+    RUNS.forEach(r => {{ cumSum += r.reviewed; cumulative.push(cumSum); }});
+    _chartInstances.push(new Chart(document.getElementById('chart-cumulative'), {{
         type: 'line',
         data: {{
             labels,
             datasets: [{{
-                label: 'Quality Score %',
-                data: RUNS.map(r => r.quality_score),
+                label: 'Cumulative Strategies',
+                data: cumulative,
                 borderColor: '#a371f7',
                 backgroundColor: 'rgba(163,113,247,0.1)',
                 fill: true,
@@ -2153,8 +2211,7 @@ function initCharts() {{
             }},
             scales: {{
                 y: {{
-                    min: 0, max: 100,
-                    ticks: {{ callback: v => v + '%' }},
+                    beginAtZero: true,
                     grid: {{ color: '#161b22' }},
                 }},
                 x: {{ grid: {{ display: false }} }},
@@ -2213,6 +2270,92 @@ function initCharts() {{
             }},
         }},
     }}));
+
+    // Cost per run (stacked bar: create / refine / review)
+    const costRuns = RUNS.filter(r => r.cost && r.cost.total_usd > 0);
+    if (costRuns.length > 0) {{
+        const costLabels = costRuns.map(r => `${{r.label}} (${{r.reviewed}})`);
+        _chartInstances.push(new Chart(document.getElementById('chart-cost'), {{
+            type: 'bar',
+            data: {{
+                labels: costLabels,
+                datasets: [{{
+                    label: 'Create',
+                    data: costRuns.map(r => r.cost.create_usd || 0),
+                    backgroundColor: '#58a6ff',
+                    borderRadius: 2,
+                }}, {{
+                    label: 'Refine',
+                    data: costRuns.map(r => r.cost.refine_usd || 0),
+                    backgroundColor: '#d29922',
+                    borderRadius: 2,
+                }}, {{
+                    label: 'Review',
+                    data: costRuns.map(r => r.cost.review_usd || 0),
+                    backgroundColor: '#f78166',
+                    borderRadius: 2,
+                }}]
+            }},
+            options: {{
+                responsive: true,
+                plugins: {{
+                    legend: {{ position: 'bottom', labels: {{ boxWidth: 12 }} }},
+                    tooltip: {{
+                        callbacks: {{
+                            label: ctx => `${{ctx.dataset.label}}: $${{ctx.raw.toFixed(2)}}`,
+                            footer: items => {{
+                                const r = costRuns[items[0].dataIndex];
+                                const total = items.reduce((s, i) => s + i.raw, 0);
+                                return `Total: $${{total.toFixed(2)}} | ${{r.reviewed}} strategies ($${{(total / (r.reviewed || 1)).toFixed(2)}}/strat)`;
+                            }},
+                        }}
+                    }}
+                }},
+                scales: {{
+                    x: {{ stacked: true, grid: {{ display: false }} }},
+                    y: {{ stacked: true, grid: {{ color: '#161b22' }}, ticks: {{ callback: v => '$' + v }} }},
+                }},
+            }},
+        }}));
+
+        // Cost per strategy
+        _chartInstances.push(new Chart(document.getElementById('chart-cost-per-strat'), {{
+            type: 'line',
+            data: {{
+                labels: costLabels,
+                datasets: [{{
+                    label: '$/Strategy',
+                    data: costRuns.map(r => r.cost.cost_per_strategy || (r.cost.total_usd / (r.reviewed || 1))),
+                    borderColor: '#bc8cff',
+                    backgroundColor: 'rgba(188,140,255,0.1)',
+                    fill: true,
+                    tension: 0.3,
+                    pointRadius: 6,
+                    pointHoverRadius: 8,
+                    pointBackgroundColor: '#bc8cff',
+                }}]
+            }},
+            options: {{
+                responsive: true,
+                plugins: {{
+                    legend: {{ display: false }},
+                    tooltip: {{
+                        callbacks: {{
+                            label: ctx => `$${{ctx.raw.toFixed(2)}} per strategy`,
+                        }}
+                    }}
+                }},
+                scales: {{
+                    y: {{
+                        min: 0,
+                        grid: {{ color: '#161b22' }},
+                        ticks: {{ callback: v => '$' + v }},
+                    }},
+                    x: {{ grid: {{ display: false }} }},
+                }},
+            }},
+        }}));
+    }}
 }}
 
 // ─── Diagram zoom/pan ────────────────────────────────────────────────────────
@@ -2313,6 +2456,7 @@ def _query_jira_kpis():
             "strat-creator-auto-refined",
             "strat-creator-needs-attention",
             "strat-creator-rubric-pass",
+            "strat-creator-human-sign-off",
         ]
         counts = query_label_counts(server, user, token, labels)
         print(f"Jira KPIs: {counts}")

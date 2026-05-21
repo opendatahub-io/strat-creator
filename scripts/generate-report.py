@@ -309,7 +309,7 @@ def health_color(rate):
         return "#d29922"
     return "#f85149"
 
-def generate_html(tasks, reviews, review_comments, skipped, pending_review, config, output_path):
+def generate_html(tasks, reviews, review_comments, skipped, pending_review, config, output_path, cost_data=None):
     """Generate the full HTML report."""
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
 
@@ -402,6 +402,11 @@ def generate_html(tasks, reviews, review_comments, skipped, pending_review, conf
     has_scores = len(scored) > 0
     avg_total_score = round(sum(r["scores"]["total"] for r in scored) / len(scored), 1) if scored else None
     needs_attention = sum(1 for r in reviewed_rows if r.get("needs_attention", False))
+
+    # Cost data
+    cost = cost_data or {}
+    cost_total = cost.get("total_usd")
+    cost_per_strat = round(cost_total / total_reviewed, 2) if cost_total is not None and total_reviewed else None
 
     # Hero statement
     attention_count = revise + split + reject
@@ -681,6 +686,7 @@ tr.clickable {{ cursor: pointer; }}
     </div>
     {"" if not skipped else '<div class="kpi"><div class="kpi-value" style="color:#d29922">' + str(len(skipped)) + '</div><div class="kpi-label">Skipped</div><div class="kpi-detail">Missing required labels</div></div>'}
     {"" if not pending_review else '<div class="kpi"><div class="kpi-value" style="color:#f0883e">' + str(len(pending_review)) + '</div><div class="kpi-label">Pending Review</div><div class="kpi-detail">Awaiting human review</div></div>'}
+    {"" if cost_total is None else '<div class="kpi"><div class="kpi-value" style="color:#bc8cff">$' + f'{cost_total:.2f}' + '</div><div class="kpi-label">Run Cost</div><div class="kpi-detail">$' + f'{cost_per_strat:.2f}' + '/strategy</div></div>'}
 </div>
 
 <!-- Two-column: Dimension breakdown + Verdict grid -->
@@ -1201,7 +1207,18 @@ def main():
         print("All RFEs were skipped, no report to generate.")
         sys.exit(0)
 
-    generate_html(tasks, reviews, review_comments, skipped, pending_review, config, output_path)
+    # Load cost data from pipeline-data.json if available
+    cost_data = None
+    pdata_path = os.path.join(args.artifacts, "pipeline-data.json")
+    if os.path.exists(pdata_path):
+        try:
+            with open(pdata_path, encoding="utf-8") as f:
+                pdata = json.load(f)
+            cost_data = pdata.get("cost")
+        except Exception as e:
+            print(f"Warning: failed to read pipeline-data.json: {e}", file=sys.stderr)
+
+    generate_html(tasks, reviews, review_comments, skipped, pending_review, config, output_path, cost_data=cost_data)
 
 if __name__ == "__main__":
     main()
