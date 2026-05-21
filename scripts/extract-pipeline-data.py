@@ -238,6 +238,26 @@ def extract_run(run_dir):
     }
 
 
+def load_cost_backfill(data_dir):
+    """Load historical cost data keyed by run_id."""
+    path = os.path.join(data_dir, "cost-backfill.json")
+    if os.path.exists(path):
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    return {}
+
+
+def get_run_cost(run_id, entry_path, pdata, cost_backfill):
+    """Get cost data for a run from pipeline-data.json or backfill."""
+    if pdata and "cost" in pdata:
+        return pdata["cost"]
+
+    if run_id in cost_backfill:
+        return cost_backfill[run_id]
+
+    return None
+
+
 def scan_runs(data_dir, max_runs=None):
     """Discover all timestamped run directories and extract data."""
     runs = []
@@ -246,6 +266,8 @@ def scan_runs(data_dir, max_runs=None):
     current_link = os.path.join(data_dir, "current")
     if os.path.islink(current_link):
         current_target = os.readlink(current_link)
+
+    cost_backfill = load_cost_backfill(data_dir)
 
     for entry in sorted(os.listdir(data_dir)):
         entry_path = os.path.join(data_dir, entry)
@@ -266,6 +288,7 @@ def scan_runs(data_dir, max_runs=None):
         run_data["timestamp"] = ts.isoformat()
         run_data["is_current"] = (entry == current_target)
 
+        pdata = None
         json_path = os.path.join(entry_path, "pipeline-data.json")
         if os.path.exists(json_path):
             with open(json_path, encoding="utf-8") as f:
@@ -276,6 +299,10 @@ def scan_runs(data_dir, max_runs=None):
             run_data["dry_run"] = True
             run_data["config"] = None
 
+        cost = get_run_cost(entry, entry_path, pdata, cost_backfill)
+        if cost is not None:
+            run_data["cost"] = cost
+
         runs.append(run_data)
 
     runs.sort(key=lambda r: r["run_id"])
@@ -283,6 +310,30 @@ def scan_runs(data_dir, max_runs=None):
         runs = runs[-max_runs:]
 
     return runs
+
+
+def compute_cost_stats(runs):
+    """Aggregate cost data across runs."""
+    costed = [r for r in runs if r.get("cost")]
+    if not costed:
+        return None
+
+    totals = [r["cost"]["total_usd"] for r in costed]
+    creates = [r["cost"]["create_usd"] for r in costed if "create_usd" in r["cost"]]
+    refines = [r["cost"]["refine_usd"] for r in costed if "refine_usd" in r["cost"]]
+    reviews = [r["cost"]["review_usd"] for r in costed if "review_usd" in r["cost"]]
+
+    total_strategies = sum(r["stats"]["total"] for r in costed)
+
+    return {
+        "total_spend_usd": round(sum(totals), 2),
+        "runs_with_cost_data": len(costed),
+        "avg_per_run_usd": round(sum(totals) / len(totals), 2),
+        "avg_per_strategy_usd": round(sum(totals) / total_strategies, 2) if total_strategies else None,
+        "avg_create_usd": round(sum(creates) / len(creates), 2) if creates else None,
+        "avg_refine_usd": round(sum(refines) / len(refines), 2) if refines else None,
+        "avg_review_usd": round(sum(reviews) / len(reviews), 2) if reviews else None,
+    }
 
 
 def compute_summary(runs):
@@ -350,7 +401,9 @@ def compute_summary(runs):
         if rfe:
             all_rfe_keys.add(rfe)
 
-    return {
+    cost_stats = compute_cost_stats(runs)
+
+    result = {
         "total_strategies": total,
         "total_rfes": len(all_rfe_keys),
         "total_runs": len(runs),
@@ -366,6 +419,9 @@ def compute_summary(runs):
         "strategies": strategies,
         "skipped": skipped,
     }
+    if cost_stats:
+        result["cost_stats"] = cost_stats
+    return result
 
 
 def main():
