@@ -1378,7 +1378,7 @@ function renderBlocked() {{
             label: 'Missing Release Targeting',
             color: '#f85149',
             icon: '🏷',
-            action: 'Set Target Version to rhoai-3.5 in Jira <strong>or</strong> add <code>strat-creator-3.5</code> label.',
+            action: 'Set Target Version to rhoai-3.5 or rhoai-3.6 in Jira <strong>or</strong> add <code>strat-creator-3.5</code> label.',
             filter: s => s.labels && s.labels.includes('missing labels') && s.labels.includes('strat-creator-3.5')
         }},
         {{

@@ -204,6 +204,9 @@ jql:
     - rhoai-3.5
     - rhoai-3.5.EA2
     - rhoai-3.5.EA1
+    - rhoai-3.6
+    - rhoai-3.6.EA1
+    - rhoai-3.6.EA2
   quality_labels:
     - rfe-creator-autofix-rubric-pass
     - tech-reviewed
@@ -217,7 +220,7 @@ jql:
         expected = (
             'project = RHAIRFE'
             ' AND (labels = "strat-creator-3.5"'
-            ' OR cf[10855] in ("rhoai-3.5", "rhoai-3.5.EA2", "rhoai-3.5.EA1"))'
+            ' OR cf[10855] in ("rhoai-3.5", "rhoai-3.5.EA2", "rhoai-3.5.EA1", "rhoai-3.6", "rhoai-3.6.EA1", "rhoai-3.6.EA2"))'
             ' AND (labels = "rfe-creator-autofix-rubric-pass"'
             ' OR labels = "tech-reviewed")'
             ' AND status NOT IN ("Closed", "Resolved", "Draft")'
