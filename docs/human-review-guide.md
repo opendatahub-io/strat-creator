@@ -49,7 +49,7 @@ CI scores every strategy on 4 dimensions (Feasibility, Testability, Scope, Archi
    export JIRA_USER="your-email@redhat.com"
    export JIRA_TOKEN="your-atlassian-api-token"  # https://id.atlassian.com/manage-profile/security/api-tokens
    ```
-3. Clone the repo: `git clone https://github.com/ederign/strat-creator.git && cd strat-creator`
+3. Clone the repo: `git clone https://github.com/opendatahub-io/strat-creator.git && cd strat-creator`
 
 ## Workflow
 
