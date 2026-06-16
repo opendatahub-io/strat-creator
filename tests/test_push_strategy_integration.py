@@ -7,7 +7,7 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
 
-from jira_utils import adf_to_markdown
+from jira_utils import adf_to_markdown, RFE_REFERENCE_MARKER
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 SCRIPT = os.path.join(PROJECT_ROOT, "scripts", "push_strategy.py")
@@ -398,6 +398,87 @@ class TestPushWithFrontmatter:
         assert "source_rfe:" not in md
         assert "RHAISTRAT-1030: Test Title" not in md
         assert "Strategy content after frontmatter" in md
+
+
+class TestPushRfeReference:
+
+    def test_replaces_rfe_content_with_reference(self, jira, art_dir):
+        """When source_rfe is in frontmatter, RFE content in Jira is replaced
+        with a link to the source RHAIRFE."""
+        jira.create("RHAISTRAT-1060", "RFE reference test",
+                     "## Business Need\n\nFull RFE content that should be replaced.")
+
+        local_file = art_dir / "artifacts" / "strat-tasks" / "RHAISTRAT-1060.md"
+        local_file.write_text(
+            "---\n"
+            "source_rfe: RHAIRFE-1060\n"
+            "---\n\n"
+            f"{STRATEGY_HEADING}\n\n"
+            "### Approach\n\n"
+            "Strategy content.\n"
+        )
+
+        result = _run(jira, "RHAISTRAT-1060", local_file)
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+
+        md = _get_description_markdown(jira, "RHAISTRAT-1060")
+        assert RFE_REFERENCE_MARKER in md
+        assert "RHAIRFE-1060" in md
+        assert "Full RFE content that should be replaced" not in md
+        assert "Strategy content." in md
+        assert STAFF_INPUT_HEADING in md
+
+    def test_preserves_rfe_content_without_frontmatter(self, jira, art_dir):
+        """Without source_rfe in frontmatter, existing RFE content is preserved."""
+        jira.create("RHAISTRAT-1061", "No frontmatter",
+                     "## Business Need\n\nOriginal RFE content preserved.")
+
+        local_file = art_dir / "artifacts" / "strat-tasks" / "RHAISTRAT-1061.md"
+        local_file.write_text(
+            f"{STRATEGY_HEADING}\n\n"
+            "Strategy content.\n"
+        )
+
+        result = _run(jira, "RHAISTRAT-1061", local_file)
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+
+        md = _get_description_markdown(jira, "RHAISTRAT-1061")
+        assert "Original RFE content preserved" in md
+        assert RFE_REFERENCE_MARKER not in md
+
+    def test_reference_on_second_push(self, jira, art_dir):
+        """Second push with source_rfe still produces the reference, not
+        a double-nested reference."""
+        jira.create("RHAISTRAT-1062", "Double push",
+                     "## Business Need\n\nOriginal content.")
+
+        local_file = art_dir / "artifacts" / "strat-tasks" / "RHAISTRAT-1062.md"
+        local_file.write_text(
+            "---\n"
+            "source_rfe: RHAIRFE-1062\n"
+            "---\n\n"
+            f"{STRATEGY_HEADING}\n\n"
+            "First push strategy.\n"
+        )
+
+        result1 = _run(jira, "RHAISTRAT-1062", local_file)
+        assert result1.returncode == 0, f"stderr: {result1.stderr}"
+
+        local_file.write_text(
+            "---\n"
+            "source_rfe: RHAIRFE-1062\n"
+            "---\n\n"
+            f"{STRATEGY_HEADING}\n\n"
+            "Second push strategy.\n"
+        )
+
+        result2 = _run(jira, "RHAISTRAT-1062", local_file)
+        assert result2.returncode == 0, f"stderr: {result2.stderr}"
+
+        md = _get_description_markdown(jira, "RHAISTRAT-1062")
+        assert md.count(RFE_REFERENCE_MARKER) == 1
+        assert "Second push strategy" in md
+        assert "First push strategy" not in md
 
 
 def _make_large_strategy(size_chars=35000):

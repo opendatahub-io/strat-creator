@@ -7,6 +7,7 @@ from push_strategy import (
     extract_strategy_section,
     extract_staff_input_section,
     extract_tldr_section,
+    extract_source_rfe,
     _build_description_stub,
     _find_strategy_attachment,
     STRATEGY_HEADING,
@@ -14,6 +15,12 @@ from push_strategy import (
     ATTACHMENT_NOTICE,
     ATTACHMENT_NOTICE_NO_TLDR,
     STRATEGY_ATTACHMENT_TEMPLATE,
+)
+from jira_utils import (
+    build_rfe_reference,
+    reconstruct_business_need,
+    RFE_REFERENCE_MARKER,
+    BUSINESS_NEED_HEADING,
 )
 
 
@@ -409,3 +416,130 @@ class TestFindStrategyAttachment:
         ]
         result = _find_strategy_attachment(attachments, "RHAISTRAT-1000")
         assert result is None
+
+
+class TestExtractSourceRfe:
+
+    def test_extracts_from_valid_frontmatter(self):
+        content = (
+            "---\n"
+            "strat_id: RHAISTRAT-1000\n"
+            "source_rfe: RHAIRFE-1234\n"
+            "status: Refined\n"
+            "---\n\n"
+            "## Business Need\n\nContent.\n"
+        )
+        assert extract_source_rfe(content) == "RHAIRFE-1234"
+
+    def test_returns_none_when_no_frontmatter(self):
+        content = "## Business Need\n\nContent.\n"
+        assert extract_source_rfe(content) is None
+
+    def test_returns_none_when_source_rfe_missing(self):
+        content = (
+            "---\n"
+            "strat_id: RHAISTRAT-1000\n"
+            "status: Refined\n"
+            "---\n\n"
+            "Content.\n"
+        )
+        assert extract_source_rfe(content) is None
+
+    def test_handles_different_rfe_numbers(self):
+        content = (
+            "---\n"
+            "source_rfe: RHAIRFE-99999\n"
+            "---\n\n"
+            "Content.\n"
+        )
+        assert extract_source_rfe(content) == "RHAIRFE-99999"
+
+
+class TestBuildRfeReference:
+
+    def test_correct_format(self):
+        result = build_rfe_reference("RHAIRFE-1234", "https://jira.example.com")
+        assert BUSINESS_NEED_HEADING in result
+        assert RFE_REFERENCE_MARKER in result
+        assert "[RHAIRFE-1234](https://jira.example.com/browse/RHAIRFE-1234)" in result
+
+    def test_different_server(self):
+        result = build_rfe_reference("RHAIRFE-5678", "https://redhat.atlassian.net")
+        assert "https://redhat.atlassian.net/browse/RHAIRFE-5678" in result
+
+
+class TestReconstructBusinessNeed:
+
+    def test_reconstructs_when_reference_present(self):
+        description = (
+            f"{BUSINESS_NEED_HEADING}\n\n"
+            f"> {RFE_REFERENCE_MARKER} "
+            "[RHAIRFE-1234](https://jira.example.com/browse/RHAIRFE-1234)\n\n"
+            f"{STRATEGY_HEADING}\n\n"
+            "Strategy content.\n"
+        )
+        rfe_md = "Users need GPU sharing for cost efficiency."
+        result = reconstruct_business_need(description, rfe_md)
+        assert "Users need GPU sharing" in result
+        assert RFE_REFERENCE_MARKER not in result
+        assert STRATEGY_HEADING in result
+        assert "Strategy content." in result
+
+    def test_preserves_full_content_when_no_reference(self):
+        description = (
+            f"{BUSINESS_NEED_HEADING}\n\n"
+            "Full RFE content already here.\n\n"
+            f"{STRATEGY_HEADING}\n\n"
+            "Strategy content.\n"
+        )
+        rfe_md = "Some RFE."
+        result = reconstruct_business_need(description, rfe_md)
+        assert result == description
+
+    def test_returns_unchanged_when_no_rfe_md(self):
+        description = (
+            f"{BUSINESS_NEED_HEADING}\n\n"
+            f"> {RFE_REFERENCE_MARKER} [RHAIRFE-1](https://x)\n\n"
+            f"{STRATEGY_HEADING}\n\nStrategy.\n"
+        )
+        result = reconstruct_business_need(description, "")
+        assert result == description
+
+    def test_returns_unchanged_when_no_strategy_heading(self):
+        description = (
+            f"{BUSINESS_NEED_HEADING}\n\n"
+            f"> {RFE_REFERENCE_MARKER} [RHAIRFE-1](https://x)\n"
+        )
+        result = reconstruct_business_need(description, "RFE content.")
+        assert result == description
+
+    def test_reconstruction_preserves_staff_input_after_strategy(self):
+        """Staff Input after Strategy heading survives reconstruction."""
+        description = (
+            f"{BUSINESS_NEED_HEADING}\n\n"
+            f"> {RFE_REFERENCE_MARKER} [RHAIRFE-1](https://x)\n\n"
+            f"{STRATEGY_HEADING}\n\n"
+            "### Technical Approach\n\n"
+            "Use MIG profiles.\n\n"
+            f"{STAFF_INPUT_HEADING}\n\n"
+            "Use Argo Workflows, not Tekton.\n"
+        )
+        rfe_md = "Users need GPU sharing for cost efficiency."
+        result = reconstruct_business_need(description, rfe_md)
+        assert "Users need GPU sharing" in result
+        assert STRATEGY_HEADING in result
+        assert "Use MIG profiles" in result
+        assert "Use Argo Workflows, not Tekton" in result
+        assert RFE_REFERENCE_MARKER not in result
+
+    def test_warns_when_marker_present_but_no_rfe_content(self, capsys):
+        """Warning is printed when reference marker found but rfe_md empty."""
+        description = (
+            f"{BUSINESS_NEED_HEADING}\n\n"
+            f"> {RFE_REFERENCE_MARKER} [RHAIRFE-1](https://x)\n\n"
+            f"{STRATEGY_HEADING}\n\nStrategy.\n"
+        )
+        result = reconstruct_business_need(description, "")
+        assert result == description
+        captured = capsys.readouterr()
+        assert "WARNING" in captured.err

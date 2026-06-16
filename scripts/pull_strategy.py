@@ -29,6 +29,9 @@ from jira_utils import (
     get_comments,
     adf_to_markdown,
     download_attachment,
+    reconstruct_business_need,
+    RFE_REFERENCE_MARKER,
+    BUSINESS_NEED_HEADING,
 )
 
 POST_CI_LABELS = {"strat-creator-rubric-pass", "strat-creator-needs-attention"}
@@ -148,6 +151,32 @@ def pull_strategy(server, user, token, strat_key, local_dir="local"):
 
     result = {"strat_key": strat_key, "files": []}
 
+    # Fetch RFE original (needed before writing strategy file for reconstruction)
+    rfe_md = ""
+    if rfe_key:
+        originals_dir = os.path.join(local_dir, "strat-originals")
+        os.makedirs(originals_dir, exist_ok=True)
+
+        rfe_data = get_issue(server, user, token, rfe_key,
+                             fields=["description"])
+        rfe_desc_adf = rfe_data.get("fields", {}).get("description")
+        rfe_md = adf_to_markdown(rfe_desc_adf).strip() if rfe_desc_adf else ""
+
+        rfe_path = os.path.join(originals_dir, f"{rfe_key}.md")
+        with open(rfe_path, "w", encoding="utf-8") as f:
+            f.write(rfe_md + "\n")
+        result["files"].append(rfe_path)
+        result["rfe_key"] = rfe_key
+        print(f"  RFE original: {rfe_path}")
+
+    # Reconstruct Business Need from linked RFE if description has a reference
+    if RFE_REFERENCE_MARKER in description_md and not rfe_key:
+        print(f"  WARNING: {strat_key} description contains an RFE reference "
+              f"link but no linked RHAIRFE was found via Cloners. "
+              f"Business Need will NOT be reconstructed.",
+              file=sys.stderr)
+    description_md = reconstruct_business_need(description_md, rfe_md)
+
     # Write strategy file
     tasks_dir = os.path.join(local_dir, "strat-tasks")
     os.makedirs(tasks_dir, exist_ok=True)
@@ -171,24 +200,8 @@ def pull_strategy(server, user, token, strat_key, local_dir="local"):
     result["files"].append(strat_path)
     print(f"  Strategy: {strat_path}")
 
-    # Fetch and write RFE original
+    # Fetch RFE comments
     if rfe_key:
-        originals_dir = os.path.join(local_dir, "strat-originals")
-        os.makedirs(originals_dir, exist_ok=True)
-
-        rfe_data = get_issue(server, user, token, rfe_key,
-                             fields=["description"])
-        rfe_desc_adf = rfe_data.get("fields", {}).get("description")
-        rfe_md = adf_to_markdown(rfe_desc_adf).strip() if rfe_desc_adf else ""
-
-        rfe_path = os.path.join(originals_dir, f"{rfe_key}.md")
-        with open(rfe_path, "w", encoding="utf-8") as f:
-            f.write(rfe_md + "\n")
-        result["files"].append(rfe_path)
-        result["rfe_key"] = rfe_key
-        print(f"  RFE original: {rfe_path}")
-
-        # Fetch RFE comments
         rfe_comments = get_comments(server, user, token, rfe_key)
         if rfe_comments:
             comments_path = os.path.join(originals_dir, f"{rfe_key}-comments.md")
