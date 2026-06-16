@@ -24,7 +24,7 @@ Commands:
 
 Exit codes:
     0 — success
-    1 — blocked (single key) or no keys locked (batch)
+    1 — blocked (single key)
     2 — error (missing env vars, API failure, invalid STRAT)
 """
 
@@ -113,7 +113,7 @@ def lock(server, user, token, keys):
 
     if not locked:
         print("No keys locked", file=sys.stderr)
-        return 1, []
+        return 0, []
 
     return 0, locked
 

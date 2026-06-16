@@ -115,7 +115,7 @@ class TestLock:
                      labels=["strat-creator-needs-attention"])
 
         result = _run(jira, ["lock", "RHAIRFE-5020", "RHAIRFE-5021"])
-        assert result.returncode == 1
+        assert result.returncode == 0
         assert "No keys locked" in result.stderr
 
 
