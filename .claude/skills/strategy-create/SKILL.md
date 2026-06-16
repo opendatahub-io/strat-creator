@@ -208,6 +208,19 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/fetch_issue.py RHAISTRAT-NNNN --fields summa
 *Add technical corrections, architectural direction, component preferences, or domain expertise below. Write in declarative, cumulative form — statements that remain valid across refinement iterations. This input takes priority over architecture context when they conflict. After review: address findings, then remove the needs-attention label from Jira.*
 ```
 
+3a. **Reconstruct RFE content if needed** — If the RHAISTRAT was previously pushed by the pipeline, its description may contain a reference link instead of the full RFE content. After writing the file, run the reconstruction utility to restore the full Business Need from the RFE original saved in Step 4:
+
+```bash
+python3 -c "
+import sys; sys.path.insert(0, '${CLAUDE_SKILL_DIR}/scripts')
+from jira_utils import reconstruct_business_need_file
+if reconstruct_business_need_file('artifacts/strat-tasks/RHAISTRAT-NNNN.md', 'artifacts/strat-originals/RHAIRFE-NNNN.md'):
+    print('[RECONSTRUCT] Business Need restored from RHAIRFE-NNNN')
+"
+```
+
+If the RFE original file does not exist, **skip this RFE** — a strategy without its full Business Need is unusable for refinement. Print `[SKIPPED] RHAIRFE-NNNN — reconstruction failed: RFE original not found at artifacts/strat-originals/RHAIRFE-NNNN.md` and append a row to `artifacts/strat-skipped.md` with reason `reconstruction failed: RFE original not found`. Continue to the next RFE.
+
 4. Set frontmatter:
 
 ```bash

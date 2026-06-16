@@ -110,7 +110,7 @@ Read the strategy's frontmatter to get the `source_rfe` key (e.g., RHAIRFE-710).
 python3 ${CLAUDE_SKILL_DIR}/scripts/fetch_issue.py RHAIRFE-NNNN --fields comment --markdown
 ```
 
-Parse the JSON output and write the comments to `artifacts/strat-originals/{source_rfe}-comments.md` (overwriting any existing file):
+Parse the JSON output and write the comments to the originals directory (overwriting any existing file). In local mode, write to `local/strat-originals/{source_rfe}-comments.md`; otherwise write to `artifacts/strat-originals/{source_rfe}-comments.md`:
 
 ```markdown
 # Comments: RHAIRFE-NNNN
@@ -126,7 +126,7 @@ Extract the content after the marker. This is high-priority input for the Techni
 
 Use this content as a primary input when writing the Technical Approach. It should inform and ground the technical decisions, though you may extend, refine, or disagree with specific recommendations based on the architecture context.
 
-If Jira is unavailable, fall back to reading the cached file at `artifacts/strat-originals/{source_rfe}-comments.md`. If neither Jira nor a cached file is available, proceed without it.
+If Jira is unavailable, fall back to reading the cached comments file from the originals directory (`local/strat-originals/` in local mode, `artifacts/strat-originals/` otherwise). If neither Jira nor a cached file is available, proceed without it.
 
 ### Source 2: Staff Engineer / SME Input
 

@@ -31,6 +31,9 @@ from jira_utils import (
     strip_metadata,
     add_attachment,
     delete_attachment,
+    build_rfe_reference,
+    BUSINESS_NEED_HEADING,
+    RFE_REFERENCE_MARKER,
 )
 
 
@@ -51,6 +54,15 @@ ATTACHMENT_NOTICE_NO_TLDR = (
     "> **Note:** The full strategy exceeds Jira's description size limit "
     "and is stored as an attachment: `{filename}`."
 )
+
+
+def extract_source_rfe(content):
+    """Extract source_rfe from YAML frontmatter before metadata is stripped."""
+    match = re.match(r'^---\s*\n(.*?)\n---', content, re.DOTALL)
+    if not match:
+        return None
+    rfe_match = re.search(r'source_rfe:\s*(RHAIRFE-\d+)', match.group(1))
+    return rfe_match.group(1) if rfe_match else None
 
 
 def extract_strategy_section(local_content):
@@ -187,6 +199,7 @@ def main():
     with open(args.local_file, "r", encoding="utf-8") as f:
         local_content = f.read()
 
+    source_rfe = extract_source_rfe(local_content)
     local_content = strip_metadata(local_content)
 
     strategy_section = extract_strategy_section(local_content)
@@ -235,6 +248,11 @@ def main():
     elif not re.search(STAFF_INPUT_PATTERN, updated_md):
         updated_md = updated_md.rstrip() + "\n\n" + STAFF_INPUT_TEMPLATE
 
+    if source_rfe and STRATEGY_HEADING in updated_md:
+        rfe_ref = build_rfe_reference(source_rfe, server)
+        idx = updated_md.index(STRATEGY_HEADING)
+        updated_md = rfe_ref + "\n\n" + updated_md[idx:]
+
     updated_adf = markdown_to_adf(updated_md)
 
     try:
@@ -248,7 +266,7 @@ def main():
                       f"{adf_size:,} chars ADF). Falling back to attachment.",
                       file=sys.stderr)
                 _push_via_attachment(server, user, token, args.issue_key,
-                                     existing_md, strategy_section,
+                                     updated_md, strategy_section,
                                      staff_input_section, attachments)
                 return
         raise

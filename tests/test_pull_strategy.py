@@ -10,7 +10,13 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
 
 from artifact_utils import read_frontmatter
-from jira_utils import markdown_to_adf, add_attachment
+from jira_utils import (
+    markdown_to_adf,
+    add_attachment,
+    build_rfe_reference,
+    RFE_REFERENCE_MARKER,
+    BUSINESS_NEED_HEADING,
+)
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 SCRIPT = os.path.join(PROJECT_ROOT, "scripts", "pull_strategy.py")
@@ -335,3 +341,282 @@ class TestPullWithStrategyAttachment:
         assert "### Technical Approach" in pulled_content
         assert "Round-trip test summary" in pulled_content
         assert "GPU time-slicing" in pulled_content
+
+
+class TestPullRfeReconstruction:
+
+    def test_reconstructs_business_need_from_reference(self, jira, tmp_path):
+        """When Jira description has a reference link instead of full RFE,
+        pull reconstructs the Business Need from the linked RHAIRFE."""
+        rfe_ref = build_rfe_reference("RHAIRFE-3050", jira.url)
+        desc = (
+            f"{rfe_ref}\n\n"
+            f"{STRATEGY_HEADING}\n\n"
+            "### Technical Approach\n\n"
+            "Use MIG profiles.\n"
+        )
+        jira.create("RHAISTRAT-2050", "Reconstruction test", desc,
+                     labels=["strat-creator-needs-attention"])
+        jira.create("RHAIRFE-3050", "GPU sharing RFE",
+                     "Users need cost-efficient GPU sharing across tenants.")
+        jira.request("POST", "/rest/api/3/issueLink", {
+            "type": {"name": "Cloners"},
+            "inwardIssue": {"key": "RHAISTRAT-2050"},
+            "outwardIssue": {"key": "RHAIRFE-3050"},
+        })
+
+        local_dir = tmp_path / "local"
+        result = _run(jira, "RHAISTRAT-2050", local_dir)
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+
+        strat_path = local_dir / "strat-tasks" / "RHAISTRAT-2050.md"
+        content = strat_path.read_text()
+        assert "cost-efficient GPU sharing across tenants" in content
+        assert RFE_REFERENCE_MARKER not in content
+        assert BUSINESS_NEED_HEADING in content
+        assert "Use MIG profiles" in content
+
+    def test_preserves_full_business_need_when_no_reference(self, jira, tmp_path):
+        """When Jira description has full RFE content (no reference marker),
+        pull preserves it unchanged."""
+        _setup_strat_with_rfe(jira, "RHAISTRAT-2051", "RHAIRFE-3051",
+                              labels=["strat-creator-rubric-pass"])
+
+        local_dir = tmp_path / "local"
+        result = _run(jira, "RHAISTRAT-2051", local_dir)
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+
+        strat_path = local_dir / "strat-tasks" / "RHAISTRAT-2051.md"
+        content = strat_path.read_text()
+        assert "Users need GPU sharing" in content
+        assert RFE_REFERENCE_MARKER not in content
+
+    def test_round_trip_with_rfe_reference(self, jira, tmp_path):
+        """Push with source_rfe (strips RFE), pull back (reconstructs).
+        Verifies full cycle preserves Business Need."""
+        jira.create("RHAISTRAT-2052", "Round trip ref",
+                     "## Business Need\n\nOriginal RFE about model serving.",
+                     labels=["strat-creator-rubric-pass"])
+        jira.create("RHAIRFE-3052", "Model serving RFE",
+                     "Users need multi-model serving with GPU sharing.")
+        jira.request("POST", "/rest/api/3/issueLink", {
+            "type": {"name": "Cloners"},
+            "inwardIssue": {"key": "RHAISTRAT-2052"},
+            "outwardIssue": {"key": "RHAIRFE-3052"},
+        })
+
+        push_script = os.path.join(PROJECT_ROOT, "scripts", "push_strategy.py")
+        push_dir = tmp_path / "push-workspace" / "artifacts"
+        (push_dir / "strat-tasks").mkdir(parents=True)
+        (push_dir / "strat-originals").mkdir(parents=True)
+
+        push_file = push_dir / "strat-tasks" / "RHAISTRAT-2052.md"
+        push_file.write_text(
+            "---\n"
+            "source_rfe: RHAIRFE-3052\n"
+            "---\n\n"
+            f"{STRATEGY_HEADING}\n\n"
+            "### Technical Approach\n\n"
+            "Deploy model serving with GPU time-slicing.\n"
+        )
+
+        push_env = _env(jira)
+        push_result = subprocess.run(
+            [sys.executable, push_script, "RHAISTRAT-2052", str(push_file)],
+            env=push_env, capture_output=True, text=True, cwd=PROJECT_ROOT)
+        assert push_result.returncode == 0, f"push stderr: {push_result.stderr}"
+
+        local_dir = tmp_path / "local"
+        pull_result = _run(jira, "RHAISTRAT-2052", local_dir)
+        assert pull_result.returncode == 0, f"pull stderr: {pull_result.stderr}"
+
+        pulled_path = local_dir / "strat-tasks" / "RHAISTRAT-2052.md"
+        content = pulled_path.read_text()
+        assert "multi-model serving with GPU sharing" in content
+        assert BUSINESS_NEED_HEADING in content
+        assert RFE_REFERENCE_MARKER not in content
+        assert "GPU time-slicing" in content
+
+    def test_pull_with_reference_but_no_cloners_link(self, jira, tmp_path):
+        """When Jira description has a reference link but no Cloners link,
+        pull succeeds with a warning and keeps the reference marker."""
+        rfe_ref = build_rfe_reference("RHAIRFE-3060", jira.url)
+        desc = (
+            f"{rfe_ref}\n\n"
+            f"{STRATEGY_HEADING}\n\n"
+            "### Technical Approach\n\n"
+            "Use vLLM.\n"
+        )
+        jira.create("RHAISTRAT-2060", "No cloners link", desc,
+                     labels=["strat-creator-needs-attention"])
+
+        local_dir = tmp_path / "local"
+        result = _run(jira, "RHAISTRAT-2060", local_dir)
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+        assert "WARNING" in result.stderr
+        assert "no linked RHAIRFE" in result.stderr
+
+        strat_path = local_dir / "strat-tasks" / "RHAISTRAT-2060.md"
+        content = strat_path.read_text()
+        assert RFE_REFERENCE_MARKER in content
+        assert "Use vLLM" in content
+
+    def test_round_trip_preserves_staff_input(self, jira, tmp_path):
+        """Push with source_rfe + Staff Input, pull back — both Business Need
+        reconstructed AND Staff Input preserved."""
+        jira.create("RHAISTRAT-2053", "Staff input round trip",
+                     "## Business Need\n\nOriginal RFE about pipelines.",
+                     labels=["strat-creator-rubric-pass"])
+        jira.create("RHAIRFE-3053", "Pipeline RFE",
+                     "Users need automated ML pipelines.")
+        jira.request("POST", "/rest/api/3/issueLink", {
+            "type": {"name": "Cloners"},
+            "inwardIssue": {"key": "RHAISTRAT-2053"},
+            "outwardIssue": {"key": "RHAIRFE-3053"},
+        })
+
+        push_script = os.path.join(PROJECT_ROOT, "scripts", "push_strategy.py")
+        push_dir = tmp_path / "push-workspace" / "artifacts"
+        (push_dir / "strat-tasks").mkdir(parents=True)
+        (push_dir / "strat-originals").mkdir(parents=True)
+
+        push_file = push_dir / "strat-tasks" / "RHAISTRAT-2053.md"
+        push_file.write_text(
+            "---\n"
+            "source_rfe: RHAIRFE-3053\n"
+            "---\n\n"
+            f"{STRATEGY_HEADING}\n\n"
+            "### Technical Approach\n\n"
+            "Deploy Kubeflow Pipelines v2.\n\n"
+            "## Staff Engineer / SME Input\n\n"
+            "Use Argo Workflows, not Tekton.\n"
+        )
+
+        push_env = _env(jira)
+        push_result = subprocess.run(
+            [sys.executable, push_script, "RHAISTRAT-2053", str(push_file)],
+            env=push_env, capture_output=True, text=True, cwd=PROJECT_ROOT)
+        assert push_result.returncode == 0, f"push stderr: {push_result.stderr}"
+
+        local_dir = tmp_path / "local"
+        pull_result = _run(jira, "RHAISTRAT-2053", local_dir)
+        assert pull_result.returncode == 0, f"pull stderr: {pull_result.stderr}"
+
+        pulled_path = local_dir / "strat-tasks" / "RHAISTRAT-2053.md"
+        content = pulled_path.read_text()
+        assert "automated ML pipelines" in content
+        assert BUSINESS_NEED_HEADING in content
+        assert RFE_REFERENCE_MARKER not in content
+        assert "Kubeflow Pipelines v2" in content
+        assert "Argo Workflows, not Tekton" in content
+
+    def test_double_cycle_push_pull(self, jira, tmp_path):
+        """Two push→pull cycles: verify content survives both rounds."""
+        jira.create("RHAISTRAT-2054", "Double cycle test",
+                     "## Business Need\n\nRFE about model monitoring.",
+                     labels=["strat-creator-needs-attention"])
+        jira.create("RHAIRFE-3054", "Monitoring RFE",
+                     "Users need real-time model drift detection.")
+        jira.request("POST", "/rest/api/3/issueLink", {
+            "type": {"name": "Cloners"},
+            "inwardIssue": {"key": "RHAISTRAT-2054"},
+            "outwardIssue": {"key": "RHAIRFE-3054"},
+        })
+
+        push_script = os.path.join(PROJECT_ROOT, "scripts", "push_strategy.py")
+        push_dir = tmp_path / "push-workspace" / "artifacts"
+        (push_dir / "strat-tasks").mkdir(parents=True)
+        (push_dir / "strat-originals").mkdir(parents=True)
+
+        # --- Cycle 1: push then pull ---
+        push_file = push_dir / "strat-tasks" / "RHAISTRAT-2054.md"
+        push_file.write_text(
+            "---\n"
+            "source_rfe: RHAIRFE-3054\n"
+            "---\n\n"
+            f"{STRATEGY_HEADING}\n\n"
+            "### Technical Approach\n\n"
+            "First version strategy.\n"
+        )
+        push_env = _env(jira)
+        r1 = subprocess.run(
+            [sys.executable, push_script, "RHAISTRAT-2054", str(push_file)],
+            env=push_env, capture_output=True, text=True, cwd=PROJECT_ROOT)
+        assert r1.returncode == 0, f"push1 stderr: {r1.stderr}"
+
+        local_dir1 = tmp_path / "local1"
+        pull1 = _run(jira, "RHAISTRAT-2054", local_dir1)
+        assert pull1.returncode == 0, f"pull1 stderr: {pull1.stderr}"
+
+        content1 = (local_dir1 / "strat-tasks" / "RHAISTRAT-2054.md").read_text()
+        assert "real-time model drift detection" in content1
+        assert RFE_REFERENCE_MARKER not in content1
+
+        # --- Cycle 2: push updated strategy, pull again ---
+        push_file.write_text(
+            "---\n"
+            "source_rfe: RHAIRFE-3054\n"
+            "---\n\n"
+            f"{STRATEGY_HEADING}\n\n"
+            "### Technical Approach\n\n"
+            "Second version strategy with drift alerting.\n"
+        )
+        r2 = subprocess.run(
+            [sys.executable, push_script, "RHAISTRAT-2054", str(push_file)],
+            env=push_env, capture_output=True, text=True, cwd=PROJECT_ROOT)
+        assert r2.returncode == 0, f"push2 stderr: {r2.stderr}"
+
+        local_dir2 = tmp_path / "local2"
+        pull2 = _run(jira, "RHAISTRAT-2054", local_dir2)
+        assert pull2.returncode == 0, f"pull2 stderr: {pull2.stderr}"
+
+        content2 = (local_dir2 / "strat-tasks" / "RHAISTRAT-2054.md").read_text()
+        assert "real-time model drift detection" in content2
+        assert BUSINESS_NEED_HEADING in content2
+        assert RFE_REFERENCE_MARKER not in content2
+        assert "drift alerting" in content2
+        assert "First version" not in content2
+
+    def test_pull_with_attachment_and_reference(self, jira, tmp_path):
+        """Strategy stored as attachment + stub has reference marker.
+        Pull should merge attachment AND reconstruct Business Need."""
+        rfe_ref = build_rfe_reference("RHAIRFE-3061", jira.url)
+        stub_desc = (
+            f"{rfe_ref}\n\n"
+            f"{STRATEGY_HEADING}\n\n"
+            "> **Note:** The full strategy exceeds Jira's description size "
+            "limit and is stored as an attachment: "
+            "`RHAISTRAT-2061-strategy.md`.\n\n"
+            "### TL;DR\n\n"
+            "Enable model serving with GPU sharing.\n"
+        )
+        jira.create("RHAISTRAT-2061", "Attachment + ref test", stub_desc,
+                     labels=["strat-creator-rubric-pass"])
+        jira.create("RHAIRFE-3061", "Model serving RFE",
+                     "Users need multi-model serving with autoscaling.")
+        jira.request("POST", "/rest/api/3/issueLink", {
+            "type": {"name": "Cloners"},
+            "inwardIssue": {"key": "RHAISTRAT-2061"},
+            "outwardIssue": {"key": "RHAIRFE-3061"},
+        })
+
+        full_strategy = (
+            f"{STRATEGY_HEADING}\n\n"
+            "### TL;DR\n\n"
+            "Enable model serving with GPU sharing.\n\n"
+            "### Technical Approach\n\n"
+            "Deploy vLLM with NVIDIA MPS.\n"
+        )
+        _upload_strategy_attachment(jira, "RHAISTRAT-2061", full_strategy)
+
+        local_dir = tmp_path / "local"
+        result = _run(jira, "RHAISTRAT-2061", local_dir)
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+
+        strat_path = local_dir / "strat-tasks" / "RHAISTRAT-2061.md"
+        content = strat_path.read_text()
+        assert "multi-model serving with autoscaling" in content
+        assert BUSINESS_NEED_HEADING in content
+        assert RFE_REFERENCE_MARKER not in content
+        assert "Deploy vLLM with NVIDIA MPS" in content
+        assert "attachment" in result.stdout.lower()
