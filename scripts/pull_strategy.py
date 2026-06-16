@@ -175,6 +175,10 @@ def pull_strategy(server, user, token, strat_key, local_dir="local"):
               f"link but no linked RHAIRFE was found via Cloners. "
               f"Business Need will NOT be reconstructed.",
               file=sys.stderr)
+    elif RFE_REFERENCE_MARKER in description_md and rfe_key and not rfe_md:
+        print(f"  WARNING: {strat_key} linked to {rfe_key} but its Jira "
+              f"description is empty. Business Need will NOT be reconstructed.",
+              file=sys.stderr)
     description_md = reconstruct_business_need(description_md, rfe_md)
 
     # Write strategy file

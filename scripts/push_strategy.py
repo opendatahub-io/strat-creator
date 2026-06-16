@@ -62,7 +62,12 @@ def extract_source_rfe(content):
     if not match:
         return None
     rfe_match = re.search(r'source_rfe:\s*(RHAIRFE-\d+)', match.group(1))
-    return rfe_match.group(1) if rfe_match else None
+    if not rfe_match:
+        return None
+    key = rfe_match.group(1)
+    if key == "RHAIRFE-0":
+        return None
+    return key
 
 
 def extract_strategy_section(local_content):
