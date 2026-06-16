@@ -266,6 +266,7 @@ def create_issue(server, user, token, project, issue_type, summary,
             "summary": summary,
             "description": description_adf,
             "priority": {"name": priority},
+            "assignee": None,
         }
     }
     if labels:
