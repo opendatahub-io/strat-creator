@@ -19,6 +19,7 @@ from push_strategy import (
 from jira_utils import (
     build_rfe_reference,
     reconstruct_business_need,
+    reconstruct_business_need_file,
     RFE_REFERENCE_MARKER,
     BUSINESS_NEED_HEADING,
 )
@@ -454,6 +455,15 @@ class TestExtractSourceRfe:
         )
         assert extract_source_rfe(content) == "RHAIRFE-99999"
 
+    def test_rejects_placeholder_rhairfe_0(self):
+        content = (
+            "---\n"
+            "source_rfe: RHAIRFE-0\n"
+            "---\n\n"
+            "Content.\n"
+        )
+        assert extract_source_rfe(content) is None
+
 
 class TestBuildRfeReference:
 
@@ -466,6 +476,11 @@ class TestBuildRfeReference:
     def test_different_server(self):
         result = build_rfe_reference("RHAIRFE-5678", "https://redhat.atlassian.net")
         assert "https://redhat.atlassian.net/browse/RHAIRFE-5678" in result
+
+    def test_strips_trailing_slash_from_server(self):
+        result = build_rfe_reference("RHAIRFE-1", "https://jira.example.com/")
+        assert "https://jira.example.com/browse/RHAIRFE-1" in result
+        assert "//browse" not in result
 
 
 class TestReconstructBusinessNeed:
@@ -532,8 +547,8 @@ class TestReconstructBusinessNeed:
         assert "Use Argo Workflows, not Tekton" in result
         assert RFE_REFERENCE_MARKER not in result
 
-    def test_warns_when_marker_present_but_no_rfe_content(self, capsys):
-        """Warning is printed when reference marker found but rfe_md empty."""
+    def test_returns_unchanged_when_marker_present_but_no_rfe_content(self):
+        """Returns unchanged when reference marker found but rfe_md empty."""
         description = (
             f"{BUSINESS_NEED_HEADING}\n\n"
             f"> {RFE_REFERENCE_MARKER} [RHAIRFE-1](https://x)\n\n"
@@ -541,5 +556,96 @@ class TestReconstructBusinessNeed:
         )
         result = reconstruct_business_need(description, "")
         assert result == description
+
+
+class TestReconstructBusinessNeedFile:
+
+    def _write(self, tmp_path, name, content):
+        p = tmp_path / name
+        p.write_text(content, encoding="utf-8")
+        return str(p)
+
+    def test_reconstructs_with_frontmatter(self, tmp_path):
+        strat = self._write(tmp_path, "strat.md", (
+            "---\nstrat_id: RHAISTRAT-100\nsource_rfe: RHAIRFE-50\n---\n"
+            f"{BUSINESS_NEED_HEADING}\n\n"
+            f"> {RFE_REFERENCE_MARKER} [RHAIRFE-50](https://x)\n\n"
+            f"{STRATEGY_HEADING}\n\nStrategy content.\n"
+        ))
+        rfe = self._write(tmp_path, "rfe.md", "Full RFE description here.")
+        assert reconstruct_business_need_file(strat, rfe) is True
+        result = (tmp_path / "strat.md").read_text()
+        assert "strat_id: RHAISTRAT-100" in result
+        assert "Full RFE description here." in result
+        assert RFE_REFERENCE_MARKER not in result
+        assert "Strategy content." in result
+
+    def test_returns_false_when_no_reference_marker(self, tmp_path):
+        strat = self._write(tmp_path, "strat.md", (
+            "---\nstrat_id: RHAISTRAT-100\n---\n"
+            f"{BUSINESS_NEED_HEADING}\n\nAlready has full content.\n\n"
+            f"{STRATEGY_HEADING}\n\nStrategy.\n"
+        ))
+        rfe = self._write(tmp_path, "rfe.md", "RFE content.")
+        assert reconstruct_business_need_file(strat, rfe) is False
+
+    def test_returns_false_when_rfe_path_missing(self, tmp_path, capsys):
+        strat = self._write(tmp_path, "strat.md", (
+            f"{BUSINESS_NEED_HEADING}\n\n"
+            f"> {RFE_REFERENCE_MARKER} [RHAIRFE-1](https://x)\n\n"
+            f"{STRATEGY_HEADING}\n\nStrategy.\n"
+        ))
+        assert reconstruct_business_need_file(strat, str(tmp_path / "missing.md")) is False
         captured = capsys.readouterr()
         assert "WARNING" in captured.err
+        assert "missing.md" in captured.err
+
+    def test_returns_false_when_rfe_file_empty(self, tmp_path):
+        strat = self._write(tmp_path, "strat.md", (
+            f"{BUSINESS_NEED_HEADING}\n\n"
+            f"> {RFE_REFERENCE_MARKER} [RHAIRFE-1](https://x)\n\n"
+            f"{STRATEGY_HEADING}\n\nStrategy.\n"
+        ))
+        rfe = self._write(tmp_path, "rfe.md", "   \n  ")
+        assert reconstruct_business_need_file(strat, rfe) is False
+
+    def test_works_without_frontmatter(self, tmp_path):
+        strat = self._write(tmp_path, "strat.md", (
+            f"{BUSINESS_NEED_HEADING}\n\n"
+            f"> {RFE_REFERENCE_MARKER} [RHAIRFE-1](https://x)\n\n"
+            f"{STRATEGY_HEADING}\n\nStrategy content.\n"
+        ))
+        rfe = self._write(tmp_path, "rfe.md", "Full RFE text.")
+        assert reconstruct_business_need_file(strat, rfe) is True
+        result = (tmp_path / "strat.md").read_text()
+        assert "Full RFE text." in result
+        assert RFE_REFERENCE_MARKER not in result
+
+    def test_idempotent_on_second_call(self, tmp_path):
+        strat = self._write(tmp_path, "strat.md", (
+            "---\nsource_rfe: RHAIRFE-1\n---\n"
+            f"{BUSINESS_NEED_HEADING}\n\n"
+            f"> {RFE_REFERENCE_MARKER} [RHAIRFE-1](https://x)\n\n"
+            f"{STRATEGY_HEADING}\n\nStrategy.\n"
+        ))
+        rfe = self._write(tmp_path, "rfe.md", "Full RFE.")
+        assert reconstruct_business_need_file(strat, rfe) is True
+        first_result = (tmp_path / "strat.md").read_text()
+        assert reconstruct_business_need_file(strat, rfe) is False
+        second_result = (tmp_path / "strat.md").read_text()
+        assert first_result == second_result
+
+    def test_frontmatter_without_trailing_newline(self, tmp_path):
+        """Handles frontmatter where closing --- has no trailing newline."""
+        strat = self._write(tmp_path, "strat.md", (
+            "---\nstrat_id: X\n---"
+            f"{BUSINESS_NEED_HEADING}\n\n"
+            f"> {RFE_REFERENCE_MARKER} [RHAIRFE-1](https://x)\n\n"
+            f"{STRATEGY_HEADING}\n\nStrategy.\n"
+        ))
+        rfe = self._write(tmp_path, "rfe.md", "Full RFE.")
+        assert reconstruct_business_need_file(strat, rfe) is True
+        result = (tmp_path / "strat.md").read_text()
+        assert "strat_id: X" in result
+        assert "Full RFE." in result
+        assert "---\n## Business Need" in result
