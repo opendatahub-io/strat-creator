@@ -106,7 +106,6 @@ def pull_strategy(server, user, token, strat_key, local_dir="local"):
     for att in attachments:
         if att.get("filename") == att_filename:
             strategy_attachment = att
-            break
 
     if strategy_attachment:
         with tempfile.NamedTemporaryFile(

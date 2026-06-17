@@ -2,12 +2,18 @@
 
 Scale output depth to match the strategy size. All sizes produce all sections — depth varies.
 
+<!-- TARGET: Strategy section ≤25K chars markdown for S/M/L. XL target ≤30K. -->
+<!-- This is a STRATEGY document, not an epic breakdown. -->
+<!-- Focus on HOW the solution works at an architectural level — the technical approach, not task lists. -->
+<!-- Implementation details (YAML schemas, init container sequences, credential flows) belong in a epic breakdown-->
+<!-- Do NOT include code snippets, YAML/JSON examples, or multi-step implementation sequences. -->
+
 ## Size Guide
 
-- **S** (Small, 1-2 sprints): Single component, single team, well-understood change. Keep sections concise.
-- **M** (Medium, 3-5 sprints): 1-2 components, may involve coordination. Moderate detail.
-- **L** (Large, 6-9 sprints): Multiple components, cross-team coordination. Detailed sections, tables.
-- **XL** (Extra Large, 10+ sprints): Platform-wide impact, multiple teams. Full detail, all subsections.
+- **S** (Small, 1-2 sprints): Single component, single team, well-understood change. Keep sections concise. Target ~10K chars.
+- **M** (Medium, 3-5 sprints): 1-2 components, may involve coordination. Moderate detail. Target ~15K chars.
+- **L** (Large, 6-9 sprints): Multiple components, cross-team coordination. Detailed sections. Target ~20K chars.
+- **XL** (Extra Large, 10+ sprints): Platform-wide impact, multiple teams. Full detail. Target ~25K chars.
 
 ---
 
@@ -22,25 +28,31 @@ Scale output depth to match the strategy size. All sizes produce all sections �
 **Components**: <list>
 
 ### Technical Approach
-<!-- S: 2-3 paragraphs. M: 3-5 paragraphs. L/XL: detailed with subsections. -->
+<!-- S: 2-3 paragraphs, no subsections (~1,500 chars). -->
+<!-- M: 3-5 paragraphs, optional subsections (~3,000 chars). -->
+<!-- L: 4-5 subsections, 1-2 paragraphs each (~6,000 chars). -->
+<!-- XL: 5-7 subsections, 1-2 paragraphs each (~9,000 chars). -->
+<!-- Each subsection: state the decision, the rationale, and the key constraint. -->
+<!-- Do NOT include code snippets, YAML/JSON schemas, or step-by-step implementation sequences. -->
+<!-- If a subsection needs more detail, reference "Design doc: _To be created_" in Supporting Documentation. -->
 <!-- Ground in business context: reference specific personas and scenarios from the RFE. -->
 <!-- Connect technical decisions to user outcomes. -->
 
 ### Affected Components
-<!-- S: bullet list of components and what changes. -->
-<!-- M/L/XL: table format below. -->
-| Component | Change | Owner Team |
-|-----------|--------|------------|
-| <name>    | <what changes> | <team> |
+<!-- S: 1-2 components. M: 2-4. L: 3-6. XL: 4-8. -->
+<!-- Format: **Component** (owner team): what changes (~15 words max per entry) -->
+<!-- Only include components where coordination is needed. Omit "no code changes" components. -->
+- **<name>** (<team>): <what changes>
 
 ### Impacted Teams
-<!-- Which teams own the affected components and need to be involved? -->
-<!-- S: bullet list. M/L/XL: table format below. -->
-| Team | Components Owned | Involvement |
-|------|-----------------|-------------|
-| <team name> | <components> | <what they need to do> |
+<!-- List only teams that must take action. Omit teams with zero deliverables. -->
+<!-- S: 1-2 teams. M: 2-3. L: 3-5. XL: 4-6. -->
+<!-- Format: **Team** (components owned): involvement (~10 words max per entry) -->
+- **<team name>** (<components owned>): <what they need to do>
 
 ### High Level Requirements
+<!-- S: 3-5 requirements. M: 5-8. L: 7-10. XL: 8-13. -->
+<!-- Each requirement: 1 line max (~120 chars). State the capability, not the implementation detail. -->
 <!-- Extract from RFE requirements. Add priority markers. -->
 <!-- [P0] Must have — blocks ship -->
 <!-- [P1] Should have — important but not blocking -->
@@ -48,18 +60,20 @@ Scale output depth to match the strategy size. All sizes produce all sections �
 <!-- If ALL items are P0, flag that prioritization may be incomplete. -->
 
 ### Dependencies
-<!-- S: bullet list. M/L/XL: table format below. -->
-| Dependency | Type | Status | Impact if Blocked |
-|------------|------|--------|-------------------|
-| <name>     | <internal/external> | <exists/needed/unknown> | <what's blocked> |
+<!-- S: 1-3 dependencies. M: 3-5. L: 5-8. XL: 6-10. -->
+<!-- Each dependency: 1 line. Fold optional/non-blocking dependencies into a single "Optional:" line. -->
+<!-- Format: **Dependency** (type, status): impact if blocked -->
+- **<name>** (<internal/external>, <exists/needed/unknown>): <what's blocked if unavailable>
 
 ### Non-Functional Requirements
+<!-- S: 2-3 NFRs. M: 3-4. L: 4-5. XL: 5-6. -->
+<!-- Each NFR: 1-2 sentences max. State the requirement, cite the source, give the testable threshold. -->
+<!-- Omit platform-wide defaults (FIPS, TLS 1.2, mTLS) unless this strategy changes them. -->
 <!-- Every NFR must cite its source: (RFE), (architecture context: <doc>), or (Staff Engineer / SME Input). -->
 <!-- Do NOT invent numeric thresholds. If no source specifies a metric, flag it in Open Questions. -->
-<!-- Architectural facts (replica counts, TLS versions, HPA ranges) ARE valid — they are grounded in the platform. -->
 <!-- Do NOT write: "good performance", "secure access", "high availability" — not testable. -->
 - **Performance**: <cite source for each metric; flag missing targets in Open Questions>
-- **Security**: <AuthN/AuthZ, RBAC scope, FIPS compliance — cite architecture context docs>
+- **Security**: <AuthN/AuthZ, RBAC scope — cite architecture context docs>
 - **Backwards Compatibility**: <migration path, deprecation timeline>
 <!-- L/XL also cover: -->
 - **Scalability**: <cite source; if no load target exists in RFE or context, flag in Open Questions>
@@ -69,9 +83,13 @@ Scale output depth to match the strategy size. All sizes produce all sections �
 <!-- ALL sizes. What is explicitly NOT part of this strategy. -->
 <!-- Include: adjacent features that might be confused with this one, -->
 <!-- future phases, integrations deferred to later releases. -->
-<!-- S: 2-3 items. M: 3-5 items. L/XL: 5+ items. -->
+<!-- S: 2-3 items. M: 3-5 items. L: 5-7 items. XL: 7-10 items. -->
+<!-- Each item: 1 line max. Reference deferral target (e.g., RHAIRFE-NNNN) if known. -->
 
 ### Acceptance Criteria (Proposed — requires PM/Engineering validation)
+<!-- S: 3-5 criteria. M: 5-7 criteria. L: 7-10 criteria. XL: 10-12 criteria. -->
+<!-- Cover: (1) happy path per P0 requirement, (2) one failure/degradation mode, (3) one security/boundary criterion. -->
+<!-- Each criterion: 2-4 lines max. Merge related edge cases into one criterion with multiple "measured by" checks. -->
 <!-- Prefer Given/When/Then format with "measured by" clause: -->
 <!--   Given [specific precondition], -->
 <!--   when [concrete action by a specific persona], -->
@@ -83,28 +101,33 @@ Scale output depth to match the strategy size. All sizes produce all sections �
 ### Effort Estimate
 <!-- T-shirt size (S/M/L/XL) with justification. -->
 <!-- Base on: component count, cross-team coordination, and technical complexity. -->
-<!-- S: 1-2 sentences. M/L/XL: paragraph with breakdown. -->
+<!-- S: 1-2 sentences (~200 chars). M: 1 paragraph (~500 chars). -->
+<!-- L: 1 paragraph with sprint breakdown (~1,000 chars). XL: 1 paragraph with sprint breakdown (~1,500 chars). -->
+<!-- State size, sprint range, top 3-4 work areas with sprint counts. Do not repeat Technical Approach content. -->
 
 ### Risks
+<!-- S: 2-3 risks. M: 3-5. L: 5-7. XL: 6-8. -->
+<!-- Each risk: 1-2 lines max. Focus on risks that change the approach or timeline. -->
 <!-- Each risk MUST have a concrete mitigation. "Track closely" is NOT a mitigation. -->
-| Risk | Impact | Mitigation |
-|------|--------|------------|
-| <specific risk> | <what breaks if this materializes> | <concrete fallback or action> |
+<!-- Format: **Risk**: impact — *Mitigation*: action -->
+- **<specific risk>**: <what breaks if this materializes> — *Mitigation*: <concrete fallback or action>
 
 ### Assumptions
-<!-- Statements believed true but not yet validated. -->
+<!-- S: 2-3 assumptions. M: 3-5. L: 4-6. XL: 5-8. -->
+<!-- Each assumption: 1 line. State the assumption and validation status. -->
 <!-- Flag any that need validation before work starts. -->
 - <assumption> — <confirmed / needs validation / unknown>
 
 ### Open Questions
+<!-- S: 1-3 questions. M: 3-5. L: 4-6. XL: 5-8. -->
+<!-- Each question: 1 line. Only include questions that block sprint 1 or change the approach. -->
 <!-- Include gaps flagged by other sections: missing NFR metrics, -->
 <!-- unresolved personas, dependency status unknowns, AC that need PM confirmation. -->
-<!-- S: bullet list. L/XL: table format below. -->
-| Question | Why It Matters | Owner |
-|----------|---------------|-------|
-| <question> | <impact if unresolved> | <who can answer> |
+<!-- Format: **Question?** *(Owner: team)* — why it matters -->
+- **<question>?** *(Owner: <who can answer>)* — <impact if unresolved>
 
 ### Supporting Documentation
+<!-- Links only. No descriptions — link text should be self-explanatory. -->
 <!-- Links to source RFE, architecture docs referenced during refinement, -->
 <!-- ADRs, design docs, prototypes. -->
 <!-- Leave placeholder slots for docs that don't exist yet. -->
@@ -116,15 +139,13 @@ Scale output depth to match the strategy size. All sizes produce all sections �
 ### Prerequisites & Process Gates
 <!-- These require human review or dedicated assessment skills. -->
 <!-- The pipeline cannot determine these automatically — fill before approval. -->
-| Prerequisite | Status | Notes |
-|-------------|--------|-------|
-| Architecture Review | _Pending human review_ | |
-| ODH/RHOAI Build Onboarding | _Pending human review_ | |
-| Licence Validation | _Pending human review_ | |
-| Accelerator/Package Support | _Pending human review_ | |
-| Documentation Support | _Pending human review_ | |
-| UXD Support | _Pending human review_ | |
-| Performance Team Support | _Pending human review_ | |
+- **Architecture Review**: _Pending human review_
+- **ODH/RHOAI Build Onboarding**: _Pending human review_
+- **Licence Validation**: _Pending human review_
+- **Accelerator/Package Support**: _Pending human review_
+- **Documentation Support**: _Pending human review_
+- **UXD Support**: _Pending human review_
+- **Performance Team Support**: _Pending human review_
 
 ## Staff Engineer / SME Input
 

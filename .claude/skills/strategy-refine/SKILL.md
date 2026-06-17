@@ -186,7 +186,9 @@ Use the unified template in `${CLAUDE_SKILL_DIR}/strat-template.md`. All sizes p
 - **Ground in architecture.** Reference actual components, APIs, CRDs, and integration patterns from the architecture context. Don't invent components.
 - **Don't weaken the business case.** The RFE says what the customer needs. The strategy says how to deliver it. If the technical approach can't fully deliver the RFE, say so explicitly — don't silently reduce scope.
 - **Be honest about complexity.** If this is harder than the RFE's size estimate suggests, say so with specifics.
-- **Scale depth to size.** All sizes produce all sections. S-sized strategies get concise content per section. L/XL get detailed content, tables, and subsections. The template has per-section size guidance in comments.
+- **Scale depth to size.** All sizes produce all sections. S-sized strategies get concise content per section. L/XL get detailed content and subsections. The template has per-section size and item-count guidance in comments — respect these limits.
+- **Strategy ≠ design doc.** Technical Approach describes the architectural approach (HOW the solution works), not implementation details. Do not include YAML/JSON schemas, code snippets, or step-by-step implementation sequences. If a section needs more detail than the template budget allows, reference "Design doc: _To be created_" in Supporting Documentation.
+- **Respect the size budget.** The strategy section should be ≤25K chars markdown for S/M/L strategies, ≤30K for XL. Each section in the template has character and item-count guidance — treat these as ceilings, not suggestions. Jira's description field has a hard size limit; strategies that exceed ~28K chars fall back to an attachment, which degrades the reviewer experience.
 - **Flag scope risks.** If delivering the RFE as written would require significantly more work than a single feature, flag it.
 - **Business Need is "The Why".** The `## Business Need (from RFE)` section serves as "The Why" in the Feature Refinement Template. Do not rename, duplicate, or paraphrase it.
 
