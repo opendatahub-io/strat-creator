@@ -31,7 +31,6 @@ from jira_utils import (
     download_attachment,
     reconstruct_business_need,
     RFE_REFERENCE_MARKER,
-    BUSINESS_NEED_HEADING,
 )
 
 POST_CI_LABELS = {"strat-creator-rubric-pass", "strat-creator-needs-attention"}
