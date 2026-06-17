@@ -32,8 +32,6 @@ from jira_utils import (
     add_attachment,
     delete_attachment,
     build_rfe_reference,
-    BUSINESS_NEED_HEADING,
-    RFE_REFERENCE_MARKER,
 )
 
 
