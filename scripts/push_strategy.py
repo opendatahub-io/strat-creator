@@ -177,7 +177,15 @@ def _push_via_attachment(server, user, token, issue_key, existing_md,
     try:
         old_att = _find_strategy_attachment(attachments, issue_key)
         if old_att:
-            delete_attachment(server, user, token, old_att["id"])
+            try:
+                delete_attachment(server, user, token, old_att["id"])
+            except urllib.error.HTTPError as e:
+                if e.code in (403, 404):
+                    print(f"  WARNING: Could not delete old attachment "
+                          f"(HTTP {e.code}). Uploading new copy.",
+                          file=sys.stderr)
+                else:
+                    raise
         add_attachment(server, user, token, issue_key,
                        tmp_path, filename=att_filename)
     finally:
