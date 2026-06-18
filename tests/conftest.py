@@ -104,13 +104,14 @@ def jira(jira_emu):
 
         @staticmethod
         def create(key, summary, description, labels=None, components=None,
-                   fix_versions=None, affects_versions=None):
+                   fix_versions=None, affects_versions=None,
+                   issue_type=None, parent_key=None, status=None):
             """Import an issue with a specific key."""
             issue = {
                 "key": key,
                 "summary": summary,
                 "project": key.split("-")[0],
-                "issue_type": "Feature Request",
+                "issue_type": issue_type or "Feature Request",
                 "description": description,
             }
             if labels:
@@ -122,6 +123,10 @@ def jira(jira_emu):
             if affects_versions:
                 issue["affects_versions"] = [{"name": v}
                                              for v in affects_versions]
+            if parent_key:
+                issue["epic_link"] = parent_key
+            if status:
+                issue["status"] = status
             _jira_request(jira_emu, "POST", "/api/admin/import",
                           {"issues": [issue]})
 

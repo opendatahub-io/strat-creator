@@ -27,6 +27,31 @@ from jira_utils import (
 )
 
 
+def _resolve_parent_outcome(server, user, token, source_fields):
+    """Return the source RFE's parent key if it's a valid, non-Closed Outcome."""
+    parent = source_fields.get("parent")
+    if not parent or not isinstance(parent, dict):
+        print("No parent Outcome found on source RFE.", file=sys.stderr)
+        return None
+
+    parent_key = parent.get("key", "")
+    if not parent_key.startswith("RHAISTRAT-"):
+        print(f"Source parent {parent_key} is not a RHAISTRAT Outcome, skipping.",
+              file=sys.stderr)
+        return None
+
+    parent_issue = get_issue(server, user, token, parent_key,
+                             fields=["status"])
+    status = parent_issue.get("fields", {}).get("status", {}).get("name", "")
+    if status == "Closed":
+        print(f"Source parent {parent_key} is Closed, skipping.",
+              file=sys.stderr)
+        return None
+
+    print(f"Setting parent Outcome: {parent_key}", file=sys.stderr)
+    return parent_key
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -45,7 +70,8 @@ def main():
 
     source = get_issue(server, user, token, args.source_key,
                        fields=["summary", "description", "priority", "labels",
-                               "components", "fixVersions", "versions"])
+                               "components", "fixVersions", "versions",
+                               "parent"])
     fields = source.get("fields", {})
 
     summary = fields.get("summary", "")
@@ -62,6 +88,8 @@ def main():
     affects_versions = [v["name"] for v in fields.get("versions", [])
                         if isinstance(v, dict) and "name" in v]
 
+    parent_key = _resolve_parent_outcome(server, user, token, fields)
+
     new_key = create_issue(
         server, user, token,
         project=args.target_project,
@@ -73,6 +101,7 @@ def main():
         components=components,
         fix_versions=fix_versions,
         affects_versions=affects_versions,
+        parent_key=parent_key,
     )
 
     # Cloners link: new issue "is cloned by" source (STRAT is the clone of the RFE)

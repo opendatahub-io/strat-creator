@@ -15,10 +15,10 @@ You are signing off on a strategy that has passed CI review, marking it as featu
 
 Read the strategy file from `local/strat-tasks/RHAISTRAT-NNNN.md`. Verify it exists.
 
-Then fetch the current labels from Jira:
+Then fetch the current labels and parent from Jira:
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/fetch_issue.py RHAISTRAT-NNNN --fields labels --markdown
+python3 ${CLAUDE_SKILL_DIR}/scripts/fetch_issue.py RHAISTRAT-NNNN --fields labels,parent --markdown
 ```
 
 **Guard checks:**
@@ -26,6 +26,10 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/fetch_issue.py RHAISTRAT-NNNN --fields label
 - If the issue has `strat-creator-needs-attention` (not `rubric-pass`): tell the user this strategy needs CI approval first. Suggest using `/strategy-push` to resubmit, then waiting for CI to approve before signing off. **Stop here.**
 - If the issue does NOT have `strat-creator-rubric-pass`: tell the user this strategy hasn't been CI-approved yet and cannot be signed off. **Stop here.**
 - If the local file does not exist: tell the user to run `/strategy-pull RHAISTRAT-NNNN` first. **Stop here.**
+
+**Parent check (non-blocking):**
+
+- If the issue has no `parent` field set: print `[WARNING] RHAISTRAT-NNNN has no parent Outcome set. Consider setting one in Jira for proper hierarchy navigation.` Continue with sign-off.
 
 ## Step 2: Confirm with User
 

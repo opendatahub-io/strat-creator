@@ -99,6 +99,48 @@ class TestCloneIssue:
         aff_names = [v["name"] for v in clone_fields.get("versions", [])]
         assert aff_names == ["2.10"]
 
+    def test_clone_inherits_parent_outcome_from_rfe(self, jira):
+        jira.create("RHAISTRAT-500", "AI Hub Delivery",
+                     "Top-level Outcome.", issue_type="Outcome")
+        jira.create("RHAIRFE-1003", "Agent catalog search",
+                     "Search for agents in the catalog.",
+                     parent_key="RHAISTRAT-500")
+
+        result = _run(jira, ["RHAIRFE-1003", "--target-project", "RHAISTRAT"])
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+
+        new_key = result.stdout.strip()
+        clone = jira.get(new_key)
+        assert clone["fields"]["parent"]["key"] == "RHAISTRAT-500"
+        assert "Setting parent Outcome: RHAISTRAT-500" in result.stderr
+
+    def test_clone_skips_closed_parent_outcome(self, jira):
+        jira.create("RHAISTRAT-501", "Old Outcome",
+                     "Deprecated.", issue_type="Outcome", status="Closed")
+        jira.create("RHAIRFE-1004", "Legacy feature",
+                     "Should not inherit closed parent.",
+                     parent_key="RHAISTRAT-501")
+
+        result = _run(jira, ["RHAIRFE-1004", "--target-project", "RHAISTRAT"])
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+
+        new_key = result.stdout.strip()
+        clone = jira.get(new_key)
+        assert clone["fields"].get("parent") is None
+        assert "Closed" in result.stderr
+
+    def test_clone_no_parent_on_rfe(self, jira):
+        jira.create("RHAIRFE-1005", "Standalone feature",
+                     "No parent Outcome on the RFE.")
+
+        result = _run(jira, ["RHAIRFE-1005", "--target-project", "RHAISTRAT"])
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+
+        new_key = result.stdout.strip()
+        clone = jira.get(new_key)
+        assert clone["fields"].get("parent") is None
+        assert "No parent Outcome found" in result.stderr
+
     def test_missing_env_vars_exits_with_code_2(self, jira):
         env = {k: v for k, v in os.environ.items()
                if k not in ("JIRA_SERVER", "JIRA_USER", "JIRA_TOKEN")}
