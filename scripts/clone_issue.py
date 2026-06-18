@@ -46,12 +46,20 @@ def _resolve_parent_outcome(server, user, token, source_fields):
 
     try:
         parent_issue = get_issue(server, user, token, parent_key,
-                                 fields=["status"])
+                                 fields=["status", "issuetype"])
     except Exception as exc:
         print(f"Could not fetch parent Outcome {parent_key}: {exc}. Skipping.",
               file=sys.stderr)
         return None
-    status = parent_issue.get("fields", {}).get("status", {}).get("name", "")
+
+    parent_fields = parent_issue.get("fields", {})
+    issue_type = parent_fields.get("issuetype", {}).get("name", "")
+    if issue_type != "Outcome":
+        print(f"Source parent {parent_key} is type '{issue_type}', not Outcome. Skipping.",
+              file=sys.stderr)
+        return None
+
+    status = parent_fields.get("status", {}).get("name", "")
     if status == "Closed":
         print(f"Source parent {parent_key} is Closed, skipping.",
               file=sys.stderr)
