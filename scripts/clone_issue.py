@@ -34,14 +34,23 @@ def _resolve_parent_outcome(server, user, token, source_fields):
         print("No parent Outcome found on source RFE.", file=sys.stderr)
         return None
 
-    parent_key = parent.get("key", "")
+    parent_key = parent.get("key")
+    if not isinstance(parent_key, str):
+        print("Source parent key is missing or invalid, skipping.",
+              file=sys.stderr)
+        return None
     if not parent_key.startswith("RHAISTRAT-"):
         print(f"Source parent {parent_key} is not a RHAISTRAT Outcome, skipping.",
               file=sys.stderr)
         return None
 
-    parent_issue = get_issue(server, user, token, parent_key,
-                             fields=["status"])
+    try:
+        parent_issue = get_issue(server, user, token, parent_key,
+                                 fields=["status"])
+    except Exception as exc:
+        print(f"Could not fetch parent Outcome {parent_key}: {exc}. Skipping.",
+              file=sys.stderr)
+        return None
     status = parent_issue.get("fields", {}).get("status", {}).get("name", "")
     if status == "Closed":
         print(f"Source parent {parent_key} is Closed, skipping.",
