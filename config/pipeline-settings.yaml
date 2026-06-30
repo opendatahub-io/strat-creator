@@ -3,6 +3,7 @@ jql:
   project: RHAIRFE
   required_labels:
     - strat-creator-3.5
+    - strat-creator-3.6
   target_versions:     # OR'd with required_labels via cf[10855]
     - rhoai-3.5
     - rhoai-3.5.EA2
@@ -10,6 +11,12 @@ jql:
     - rhoai-3.6
     - rhoai-3.6.EA1
     - rhoai-3.6.EA2
+    - "3.5 GA RHOAI RELEASE"
+    - "3.6 EA1 RHAII RELEASE"
+    - "3.6 EA1 RHOAI RELEASE"
+    - "3.6 EA2 RHOAI RELEASE"
+    - "3.6 GA RHAII RELEASE"
+    - "3.6 GA RHOAI RELEASE"
   quality_labels:      # at least one required
     - rfe-creator-autofix-rubric-pass
     - tech-reviewed

@@ -13,8 +13,8 @@
 Not every RHAIRFE issue gets a strategy. The pipeline selects RFEs that pass two gates:
 
 1. **Scope gate** — the RFE is tagged for the current release cycle:
-   - Has the `strat-creator-3.5` label, **OR**
-   - Has a Target Version of `rhoai-3.5`, `rhoai-3.5.EA1`, `rhoai-3.5.EA2`, `rhoai-3.6`, `rhoai-3.6.EA1`, or `rhoai-3.6.EA2`
+   - Has the `strat-creator-3.5` or `strat-creator-3.6` label, **OR**
+   - Has a Target Version of `rhoai-3.5`, `rhoai-3.5.EA1`, `rhoai-3.5.EA2`, `rhoai-3.6`, `rhoai-3.6.EA1`, `rhoai-3.6.EA2`, `3.5 GA RHOAI RELEASE`, `3.6 EA1 RHAII RELEASE`, `3.6 EA1 RHOAI RELEASE`, `3.6 EA2 RHOAI RELEASE`, `3.6 GA RHAII RELEASE`, or `3.6 GA RHOAI RELEASE`
 2. **Quality gate** — the RFE has been validated:
    - `rfe-creator-autofix-rubric-pass` (CI-approved), **OR**
    - `tech-reviewed` (human-approved)
