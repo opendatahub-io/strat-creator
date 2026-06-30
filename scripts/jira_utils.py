@@ -153,7 +153,7 @@ def build_jql_from_config(config_path):
     order = jql_cfg.get("order_by", "key ASC")
 
     clauses = [f'project = {project}']
-    label_clause = " AND ".join(f'labels = "{l}"' for l in required)
+    label_clause = " OR ".join(f'labels = "{l}"' for l in required)
     version_clause = ""
     if target_versions:
         versions_csv = ", ".join(f'"{v}"' for v in target_versions)
@@ -161,7 +161,10 @@ def build_jql_from_config(config_path):
     if label_clause and version_clause:
         clauses.append(f'({label_clause} OR {version_clause})')
     elif label_clause:
-        clauses.append(label_clause)
+        if len(required) > 1:
+            clauses.append(f'({label_clause})')
+        else:
+            clauses.append(label_clause)
     elif version_clause:
         clauses.append(version_clause)
     if quality:

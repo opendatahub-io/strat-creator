@@ -67,10 +67,10 @@ For each selected RFE, fetch its status and labels from Jira (the `status` and `
 
 **Label check**: Check that the RFE has **both**:
 
-1. `strat-creator-3.5` label **OR** a Target Version (`customfield_10855`) of `rhoai-3.5`, `rhoai-3.5.EA1`, `rhoai-3.5.EA2`, `rhoai-3.6`, `rhoai-3.6.EA1`, or `rhoai-3.6.EA2`
+1. `strat-creator-3.5` or `strat-creator-3.6` label **OR** a Target Version (`customfield_10855`) matching any version in `pipeline-settings.yaml` `target_versions`
 2. At least one of: `rfe-creator-autofix-rubric-pass` or `tech-reviewed`
 
-To check Target Version, fetch the `customfield_10855` field from Jira. It is an array of version objects with a `name` property (e.g., `[{"name": "rhoai-3.5"}]`).
+To check Target Version, fetch the `customfield_10855` field from Jira. It is an array of version objects with a `name` property (e.g., `[{"name": "3.6 EA1 RHOAI RELEASE"}]`). Match against the `target_versions` list in `pipeline-settings.yaml`.
 
 If an RFE fails the label gate, **skip it** — do not create a strategy stub. Instead, append it to `artifacts/strat-skipped.md`.
 

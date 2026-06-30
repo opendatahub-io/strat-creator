@@ -73,7 +73,6 @@ jql:
         jql = build_jql_from_config(config)
         assert "project = MYPROJ" in jql
         assert 'labels = "required-one"' in jql
-        assert " OR " not in jql
         assert 'status NOT IN ("Closed")' in jql
 
     def test_empty_excluded_statuses(self, tmp_path):
@@ -110,7 +109,7 @@ batch_size: 5
         assert "project = RHAIRFE" in jql
         assert "ORDER BY key ASC" in jql
 
-    def test_multiple_required_labels_are_anded(self, tmp_path):
+    def test_multiple_required_labels_are_ored(self, tmp_path):
         config = self._write_config(tmp_path, """\
 jql:
   project: RHAIRFE
@@ -122,11 +121,7 @@ jql:
   order_by: key ASC
 """)
         jql = build_jql_from_config(config)
-        assert 'labels = "label-alpha"' in jql
-        assert 'labels = "label-beta"' in jql
-        parts = jql.split(" AND ")
-        label_parts = [p for p in parts if "label-alpha" in p or "label-beta" in p]
-        assert len(label_parts) == 2
+        assert 'labels = "label-alpha" OR labels = "label-beta"' in jql
 
     def test_quality_labels_grouped_with_or(self, tmp_path):
         config = self._write_config(tmp_path, """\
@@ -200,13 +195,10 @@ jql:
   project: RHAIRFE
   required_labels:
     - strat-creator-3.5
+    - strat-creator-3.6
   target_versions:
     - rhoai-3.5
-    - rhoai-3.5.EA2
-    - rhoai-3.5.EA1
     - rhoai-3.6
-    - rhoai-3.6.EA1
-    - rhoai-3.6.EA2
   quality_labels:
     - rfe-creator-autofix-rubric-pass
     - tech-reviewed
@@ -219,8 +211,8 @@ jql:
         jql = build_jql_from_config(config)
         expected = (
             'project = RHAIRFE'
-            ' AND (labels = "strat-creator-3.5"'
-            ' OR cf[10855] in ("rhoai-3.5", "rhoai-3.5.EA2", "rhoai-3.5.EA1", "rhoai-3.6", "rhoai-3.6.EA1", "rhoai-3.6.EA2"))'
+            ' AND (labels = "strat-creator-3.5" OR labels = "strat-creator-3.6"'
+            ' OR cf[10855] in ("rhoai-3.5", "rhoai-3.6"))'
             ' AND (labels = "rfe-creator-autofix-rubric-pass"'
             ' OR labels = "tech-reviewed")'
             ' AND status NOT IN ("Closed", "Resolved", "Draft")'
