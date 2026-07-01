@@ -65,6 +65,32 @@ Otherwise, fetch from remote:
 bash ${CLAUDE_SKILL_DIR}/scripts/fetch-architecture-context.sh
 ```
 
+## Step 2.5: Run Structural Validation (Pre-Filter)
+
+For each strategy in `artifacts/strat-tasks/` (or `local/strat-tasks/` in local mode), run structural validation to get fast, deterministic metrics:
+
+```bash
+mkdir -p tmp
+
+# Determine which directory to read from (local mode vs CI mode)
+if [ -d local/strat-tasks ] && [ "$(ls -A local/strat-tasks 2>/dev/null)" ]; then
+    STRAT_DIR="local/strat-tasks"
+else
+    STRAT_DIR="artifacts/strat-tasks"
+fi
+
+# Run validation on each STRAT
+for strat_file in "$STRAT_DIR"/*.md; do
+    [ -f "$strat_file" ] || continue
+    strat_id=$(basename "$strat_file" .md)
+    python3 scripts/validate_strat_testability.py "$strat_file" > "tmp/structural-${strat_id}.json"
+done
+```
+
+Read the structural validation JSON files to identify any critical structural issues. If any STRAT has `structural_score < 5` or multiple CRITICAL warnings, it will likely produce a low-quality test plan.
+
+Pass the structural validation results to strategy-testability-review by including them in the review context (the fork skill will read from tmp/).
+
 ## Step 3: Bootstrap assess-strat
 
 ```bash

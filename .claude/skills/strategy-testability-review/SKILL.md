@@ -25,6 +25,15 @@ If `$ARGUMENTS` contains a strategy key (e.g., `RHAISTRAT-133`), review only tha
 
 Cross-reference against the source RFEs for the original acceptance criteria. If this is a re-review (prior review files exist), read them.
 
+## Structural Validation Results (if available)
+
+The orchestrator runs `scripts/validate_strat_testability.py` before launching reviewers and saves results to `tmp/structural-{STRAT_ID}.json`. Read these files to focus your semantic review:
+- If structural_score < 5: Major structural issues (missing sections, no interactions detected)
+- Check warnings for specific gaps (no error cases, no edge cases, TBDs, etc.)
+- Use detected_interaction_types to understand what kind of feature this is (API, UI, Operator, etc.)
+
+The structural validation provides fast, deterministic metrics. Your semantic review assesses whether the content is **sufficient and appropriate** for test plan generation.
+
 ## What to Assess
 
 For each strategy:
@@ -43,17 +52,44 @@ If this is a re-review:
 - What concerns remain?
 - What new issues did the revisions introduce?
 
+## Test Plan Generation Readiness
+
+In addition to evaluating testability, assess whether the STRAT contains sufficient information for automated test plan generation via `/test-plan-create`.
+
+**Use the [Test-Plan-Create Compatibility Checklist](./test-plan-compatibility.md)** which defines:
+- 9 compatibility checks across 3 analyzers (Interaction, Risks, Infra)
+- Scoring criteria for each analyzer (✅ Ready / ⚠️ Partial / ❌ Insufficient)
+- Aggregate scoring to determine overall readiness (Ready / Needs improvement / Not ready)
+- Decision tree with recommended actions for each readiness level
+
+Apply the checks and use the scoring table to determine readiness.
+
 ## Output
 
 For each strategy:
 
 ```
 ### STRAT-NNN: <title>
+
 **Testability**: <testable / partially testable / untestable criteria listed>
+
+**Test Plan Generation Readiness**: <Ready / Needs improvement / Not ready>
+  - Interaction analyzer: <✅ Ready / ⚠️ Partial / ❌ Insufficient>
+  - Risks analyzer: <✅ Ready / ⚠️ Partial / ❌ Insufficient>
+  - Infra analyzer: <✅ Ready / ⚠️ Partial / ❌ Insufficient>
+
+**Missing for test plan generation:**
+- <List specific gaps that would cause test-plan-create to produce TBDs or low quality score>
+- <For each analyzer with ⚠️ or ❌, specify which compatibility checks failed and what to add>
+
 **Missing edge cases**: <list or "none identified">
 **Untestable criteria**: <list or "none">
 **Test complexity**: <straightforward / moderate / requires significant test infrastructure>
-**Recommendation**: <approve / revise criteria / add test plan>
+
+**Recommendation:**
+- **If Ready**: Proceed to `/test-plan-create RHAISTRAT-NNN` (expected quality ≥8/10)
+- **If Needs improvement**: <Specific additions needed> (expected quality 4-7/10 if proceeding anyway)
+- **If Not ready**: <Blocking issues preventing test plan generation> (do NOT proceed)
 ```
 
-Focus on what can't be tested or validated. If acceptance criteria are vague, suggest specific rewrites that would make them testable.
+Focus on what can't be tested or validated. If acceptance criteria are vague, suggest specific rewrites that would make them testable. For test plan readiness, be specific about which compatibility checks failed and what content is missing.
