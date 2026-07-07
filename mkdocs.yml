@@ -1,0 +1,111 @@
+site_name: Strat Creator
+site_description: Strategy creation pipeline for RHOAI
+site_url: https://opendatahub-io.github.io/strat-creator/
+repo_url: https://github.com/opendatahub-io/strat-creator
+repo_name: opendatahub-io/strat-creator
+
+theme:
+  name: material
+  language: en
+  icon:
+    repo: fontawesome/brands/github
+  font:
+    text: Red Hat Text
+    code: Red Hat Mono
+  palette:
+    - scheme: default
+      primary: black
+      toggle:
+        icon: material/brightness-4
+        name: Switch to dark mode
+    - scheme: slate
+      primary: black
+      toggle:
+        icon: material/brightness-7
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.top
+    - navigation.indexes
+    - navigation.instant
+    - navigation.path
+    - navigation.sections
+    - search.suggest
+    - search.highlight
+    - search.share
+    - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+    - toc.follow
+
+plugins:
+  - search
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      name: Strat Creator on GitHub
+      link: https://github.com/opendatahub-io/strat-creator
+
+extra_css:
+  - stylesheets/extra.css
+
+extra_javascript:
+  - javascripts/diagram-zoom.js
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.snippets
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - attr_list
+  - md_in_html
+  - def_list
+  - tables
+  - toc:
+      permalink: true
+
+exclude_docs: |
+  superpowers/
+
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - Concepts & Glossary: glossary.md
+  - Workflow Guide:
+    - For Product Managers: workflow-guide/product-managers.md
+    - For Staff Engineers: workflow-guide/staff-engineers.md
+    - For Engineering Managers: workflow-guide/engineering-managers.md
+  - Pipeline Stages:
+    - RFE Creation: pipeline-stages/rfe-creation.md
+    - RFE Assessment: pipeline-stages/rfe-assessment.md
+    - RFE Submission: pipeline-stages/rfe-submission.md
+    - RFE Discovery & Filtering: pipeline-stages/rfe-discovery-filtering.md
+    - Strategy Creation: pipeline-stages/strategy-creation.md
+    - Strategy Refinement: pipeline-stages/strategy-refinement.md
+    - Strategy Review: pipeline-stages/strategy-review.md
+    - Human Review & Sign-off: pipeline-stages/human-review-signoff.md
+  - Reference:
+    - Skill Reference: reference/skill-reference.md
+    - Scoring & Rubric: reference/scoring-rubric.md
+    - Jira Labels & Fields: reference/jira-labels-fields.md
+    - Dashboard Guide: reference/dashboard-guide.md
+    - Architecture Context: reference/architecture-context.md
+    - System Architecture: reference/system-architecture.md
+    - Troubleshooting: reference/troubleshooting.md
+
+copyright: Copyright &copy; Red Hat, Inc.
