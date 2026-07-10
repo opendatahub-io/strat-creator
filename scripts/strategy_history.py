@@ -31,10 +31,10 @@ STRATEGY_SECTION_RE = re.compile(
 
 
 def find_latest_version(history_dir):
-    """Return the highest version number found in history_dir, or 0."""
+    """Return the highest version number found in history_dir, or -1 if none."""
     if not os.path.isdir(history_dir):
-        return 0
-    best = 0
+        return -1
+    best = -1
     for name in os.listdir(history_dir):
         m = re.match(r'^v(\d+)\.md$', name)
         if m:
@@ -185,7 +185,7 @@ def generate_diff_html(strat_id, old_version, new_version, old_content, new_cont
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>{escape_html(strat_id)} — v{old_version} → v{new_version}</title>
+<title>{escape_html(strat_id)} — {old_version} → {new_version}</title>
 <style>
 * {{ margin: 0; padding: 0; box-sizing: border-box; }}
 body {{
@@ -253,7 +253,7 @@ h1 {{ font-size: 1.4em; margin-bottom: 4px; }}
 </head>
 <body>
 <h1>{escape_html(strat_id)} — Version Diff</h1>
-<div class="subtitle">v{old_version} → v{new_version} &middot; {timestamp}</div>
+<div class="subtitle">{old_version} → {new_version} &middot; {timestamp}</div>
 <div class="summary">
     <span class="stat stat-changed">{changed_count} section{"s" if changed_count != 1 else ""} changed</span>
     <span class="stat stat-unchanged">{unchanged_count} section{"s" if unchanged_count != 1 else ""} unchanged</span>
@@ -277,12 +277,11 @@ function toggleSection(header) {{
     return html
 
 
-def save(strategy_path):
-    """Save a version snapshot and generate a diff if a prior version exists."""
-    if not os.path.isfile(strategy_path):
-        print(f"Error: file not found: {strategy_path}", file=sys.stderr)
-        return 1
+PRE_REFINE_STAGING = ".pre-refine.md"
 
+
+def _resolve_history_dir(strategy_path):
+    """Derive the history directory and strat_id from a strategy file path."""
     data, _ = read_frontmatter(strategy_path)
     strat_id = data.get("strat_id")
     if not strat_id:
@@ -291,6 +290,31 @@ def save(strategy_path):
     base_dir = os.path.dirname(strategy_path)
     history_dir = os.path.join(base_dir, "..", "strat-history", strat_id)
     history_dir = os.path.normpath(history_dir)
+    return history_dir, strat_id
+
+
+def snapshot(strategy_path):
+    """Save a pre-refine snapshot so `save` can diff against it."""
+    if not os.path.isfile(strategy_path):
+        print(f"Error: file not found: {strategy_path}", file=sys.stderr)
+        return 1
+
+    history_dir, strat_id = _resolve_history_dir(strategy_path)
+    os.makedirs(history_dir, exist_ok=True)
+
+    staging_path = os.path.join(history_dir, PRE_REFINE_STAGING)
+    shutil.copy2(strategy_path, staging_path)
+    print(f"Snapshot saved for {strat_id} (pre-refine)", file=sys.stderr)
+    return 0
+
+
+def save(strategy_path):
+    """Save a version snapshot and generate a diff against the pre-refine snapshot."""
+    if not os.path.isfile(strategy_path):
+        print(f"Error: file not found: {strategy_path}", file=sys.stderr)
+        return 1
+
+    history_dir, strat_id = _resolve_history_dir(strategy_path)
     os.makedirs(history_dir, exist_ok=True)
 
     current_version = find_latest_version(history_dir)
@@ -303,18 +327,30 @@ def save(strategy_path):
     with open(new_path, "w", encoding="utf-8") as f:
         f.write(content)
 
-    print(f"Saved {strat_id} v{new_version} to {new_path}", file=sys.stderr)
+    new_label = f"v{new_version}"
+    print(f"Saved {strat_id} {new_label} to {new_path}", file=sys.stderr)
 
-    if current_version >= 1:
+    staging_path = os.path.join(history_dir, PRE_REFINE_STAGING)
+    old_content = None
+    old_label = None
+
+    if os.path.isfile(staging_path):
+        with open(staging_path, encoding="utf-8") as f:
+            old_content = f.read()
+        old_label = f"v{new_version - 1}"
+        os.remove(staging_path)
+    elif current_version >= 0:
         old_path = os.path.join(history_dir, f"v{current_version}.md")
         with open(old_path, encoding="utf-8") as f:
             old_content = f.read()
+        old_label = f"v{current_version}"
 
+    if old_content is not None:
         diff_html = generate_diff_html(
-            strat_id, current_version, new_version, old_content, content
+            strat_id, old_label, new_label, old_content, content
         )
 
-        diff_filename = f"v{current_version}-to-v{new_version}.html"
+        diff_filename = f"{old_label}-to-{new_label}.html"
         diff_path = os.path.join(history_dir, diff_filename)
         with open(diff_path, "w", encoding="utf-8") as f:
             f.write(diff_html)
@@ -335,11 +371,17 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     sub = parser.add_subparsers(dest="command")
-    save_parser = sub.add_parser("save", help="Save a version snapshot")
+
+    snap_parser = sub.add_parser("snapshot", help="Save pre-refine snapshot")
+    snap_parser.add_argument("strategy_file", help="Path to the strategy file")
+
+    save_parser = sub.add_parser("save", help="Save post-refine version and generate diff")
     save_parser.add_argument("strategy_file", help="Path to the strategy file")
 
     args = parser.parse_args()
-    if args.command == "save":
+    if args.command == "snapshot":
+        sys.exit(snapshot(args.strategy_file))
+    elif args.command == "save":
         sys.exit(save(args.strategy_file))
     else:
         parser.print_help()

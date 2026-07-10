@@ -13,6 +13,7 @@ from strategy_history import (
     has_changes,
     diff_to_html,
     generate_diff_html,
+    snapshot,
     save,
     STRATEGY_HEADING,
 )
@@ -88,11 +89,11 @@ def _make_strategy_file(path, strategy_body, frontmatter=SAMPLE_FRONTMATTER):
 
 class TestVersionDiscovery:
 
-    def test_returns_zero_for_empty_dir(self, tmp_path):
-        assert find_latest_version(str(tmp_path)) == 0
+    def test_returns_neg_one_for_empty_dir(self, tmp_path):
+        assert find_latest_version(str(tmp_path)) == -1
 
-    def test_returns_zero_for_nonexistent_dir(self, tmp_path):
-        assert find_latest_version(str(tmp_path / "nope")) == 0
+    def test_returns_neg_one_for_nonexistent_dir(self, tmp_path):
+        assert find_latest_version(str(tmp_path / "nope")) == -1
 
     def test_finds_single_version(self, tmp_path):
         (tmp_path / "v1.md").write_text("content")
@@ -222,30 +223,30 @@ class TestHtmlGeneration:
     def test_generates_valid_html(self):
         content_v1 = SAMPLE_FRONTMATTER + SAMPLE_STRATEGY_V1
         content_v2 = SAMPLE_FRONTMATTER + SAMPLE_STRATEGY_V2
-        html = generate_diff_html("RHAISTRAT-100", 1, 2, content_v1, content_v2)
+        html = generate_diff_html("RHAISTRAT-100", "v0", "v1", content_v1, content_v2)
         assert "<!DOCTYPE html>" in html
         assert "RHAISTRAT-100" in html
+        assert "v0" in html
         assert "v1" in html
-        assert "v2" in html
 
     def test_changed_sections_expanded(self):
         content_v1 = SAMPLE_FRONTMATTER + SAMPLE_STRATEGY_V1
         content_v2 = SAMPLE_FRONTMATTER + SAMPLE_STRATEGY_V2
-        html = generate_diff_html("RHAISTRAT-100", 1, 2, content_v1, content_v2)
+        html = generate_diff_html("RHAISTRAT-100", "v0", "v1", content_v1, content_v2)
         assert "diff-del" in html
         assert "diff-ins" in html
 
     def test_unchanged_sections_collapsed(self):
         content_v1 = SAMPLE_FRONTMATTER + SAMPLE_STRATEGY_V1
         content_v2 = SAMPLE_FRONTMATTER + SAMPLE_STRATEGY_V2
-        html = generate_diff_html("RHAISTRAT-100", 1, 2, content_v1, content_v2)
+        html = generate_diff_html("RHAISTRAT-100", "v0", "v1", content_v1, content_v2)
         assert "no changes" in html.lower()
         assert "collapsed" in html
 
     def test_toc_present(self):
         content_v1 = SAMPLE_FRONTMATTER + SAMPLE_STRATEGY_V1
         content_v2 = SAMPLE_FRONTMATTER + SAMPLE_STRATEGY_V2
-        html = generate_diff_html("RHAISTRAT-100", 1, 2, content_v1, content_v2)
+        html = generate_diff_html("RHAISTRAT-100", "v0", "v1", content_v1, content_v2)
         assert "Sections" in html
         assert "toc-changed" in html
         assert "toc-unchanged" in html
@@ -253,16 +254,36 @@ class TestHtmlGeneration:
     def test_self_contained_no_external_deps(self):
         content_v1 = SAMPLE_FRONTMATTER + SAMPLE_STRATEGY_V1
         content_v2 = SAMPLE_FRONTMATTER + SAMPLE_STRATEGY_V2
-        html = generate_diff_html("RHAISTRAT-100", 1, 2, content_v1, content_v2)
+        html = generate_diff_html("RHAISTRAT-100", "v0", "v1", content_v1, content_v2)
         assert "<style>" in html
         assert "<script>" in html
         assert 'href="http' not in html
         assert 'src="http' not in html
 
 
+class TestSnapshotCommand:
+
+    def test_snapshot_creates_staging_file(self, tmp_path):
+        strat_dir = tmp_path / "local" / "strat-tasks"
+        strat_dir.mkdir(parents=True)
+        strat_path = str(strat_dir / "RHAISTRAT-100.md")
+        _make_strategy_file(strat_path, SAMPLE_STRATEGY_V1)
+
+        result = snapshot(strat_path)
+        assert result == 0
+
+        history_dir = tmp_path / "local" / "strat-history" / "RHAISTRAT-100"
+        assert (history_dir / ".pre-refine.md").exists()
+
+    def test_snapshot_nonexistent_file_returns_error(self):
+        result = snapshot("/nonexistent/path/RHAISTRAT-999.md")
+        assert result == 1
+
+
 class TestSaveCommand:
 
-    def test_first_save_creates_v1_no_diff(self, tmp_path):
+    def test_pull_creates_v0_baseline(self, tmp_path):
+        """Pull (save without snapshot) creates v0 baseline — no diff."""
         strat_dir = tmp_path / "local" / "strat-tasks"
         strat_dir.mkdir(parents=True)
         strat_path = str(strat_dir / "RHAISTRAT-100.md")
@@ -272,53 +293,71 @@ class TestSaveCommand:
         assert result == 0
 
         history_dir = tmp_path / "local" / "strat-history" / "RHAISTRAT-100"
-        assert (history_dir / "v1.md").exists()
+        assert (history_dir / "v0.md").exists()
         assert not list(history_dir.glob("*.html"))
 
-        data, _ = read_frontmatter(strat_path)
-        assert data.get("latest_diff") is None
-
-    def test_second_save_creates_diff(self, tmp_path):
+    def test_first_refine_after_pull_creates_v1_with_diff(self, tmp_path):
+        """Pull creates v0, first refine creates v1 with v0-to-v1 diff."""
         strat_dir = tmp_path / "local" / "strat-tasks"
         strat_dir.mkdir(parents=True)
         strat_path = str(strat_dir / "RHAISTRAT-100.md")
 
         _make_strategy_file(strat_path, SAMPLE_STRATEGY_V1)
-        save(strat_path)
+        save(strat_path)  # pull → v0
 
+        snapshot(strat_path)  # refine pre-snapshot
         _make_strategy_file(strat_path, SAMPLE_STRATEGY_V2)
-        result = save(strat_path)
+        result = save(strat_path)  # refine post-save → v1
         assert result == 0
 
         history_dir = tmp_path / "local" / "strat-history" / "RHAISTRAT-100"
+        assert (history_dir / "v0.md").exists()
         assert (history_dir / "v1.md").exists()
+        assert (history_dir / "v0-to-v1.html").exists()
+        assert not (history_dir / ".pre-refine.md").exists()
+
+        data, _ = read_frontmatter(strat_path)
+        assert data["latest_diff"] == "strat-history/RHAISTRAT-100/v0-to-v1.html"
+
+    def test_second_refine_creates_v2_diff(self, tmp_path):
+        strat_dir = tmp_path / "local" / "strat-tasks"
+        strat_dir.mkdir(parents=True)
+        strat_path = str(strat_dir / "RHAISTRAT-100.md")
+
+        _make_strategy_file(strat_path, SAMPLE_STRATEGY_V1)
+        save(strat_path)  # pull → v0
+
+        snapshot(strat_path)  # first refine
+        _make_strategy_file(strat_path, SAMPLE_STRATEGY_V2)
+        save(strat_path)  # → v1
+
+        snapshot(strat_path)  # second refine
+        v3_strategy = SAMPLE_STRATEGY_V1.replace("Medium (2-3 sprints)", "Large (4-5 sprints)")
+        _make_strategy_file(strat_path, v3_strategy)
+        save(strat_path)  # → v2
+
+        history_dir = tmp_path / "local" / "strat-history" / "RHAISTRAT-100"
         assert (history_dir / "v2.md").exists()
         assert (history_dir / "v1-to-v2.html").exists()
 
         data, _ = read_frontmatter(strat_path)
         assert data["latest_diff"] == "strat-history/RHAISTRAT-100/v1-to-v2.html"
 
-    def test_third_save_updates_latest_diff(self, tmp_path):
+    def test_save_without_snapshot_falls_back_to_prev_version(self, tmp_path):
+        """If snapshot wasn't called, save falls back to diffing against previous version."""
         strat_dir = tmp_path / "local" / "strat-tasks"
         strat_dir.mkdir(parents=True)
         strat_path = str(strat_dir / "RHAISTRAT-100.md")
 
         _make_strategy_file(strat_path, SAMPLE_STRATEGY_V1)
-        save(strat_path)
+        save(strat_path)  # v0
 
         _make_strategy_file(strat_path, SAMPLE_STRATEGY_V2)
-        save(strat_path)
-
-        v3_strategy = SAMPLE_STRATEGY_V1.replace("Medium (2-3 sprints)", "Large (4-5 sprints)")
-        _make_strategy_file(strat_path, v3_strategy)
-        save(strat_path)
+        result = save(strat_path)  # v1, diffs against v0
+        assert result == 0
 
         history_dir = tmp_path / "local" / "strat-history" / "RHAISTRAT-100"
-        assert (history_dir / "v3.md").exists()
-        assert (history_dir / "v2-to-v3.html").exists()
-
-        data, _ = read_frontmatter(strat_path)
-        assert data["latest_diff"] == "strat-history/RHAISTRAT-100/v2-to-v3.html"
+        assert (history_dir / "v0-to-v1.html").exists()
 
     def test_diff_html_contains_actual_changes(self, tmp_path):
         strat_dir = tmp_path / "local" / "strat-tasks"
@@ -326,12 +365,13 @@ class TestSaveCommand:
         strat_path = str(strat_dir / "RHAISTRAT-100.md")
 
         _make_strategy_file(strat_path, SAMPLE_STRATEGY_V1)
-        save(strat_path)
+        save(strat_path)  # pull → v0
 
+        snapshot(strat_path)  # refine
         _make_strategy_file(strat_path, SAMPLE_STRATEGY_V2)
-        save(strat_path)
+        save(strat_path)  # → v1
 
-        diff_path = tmp_path / "local" / "strat-history" / "RHAISTRAT-100" / "v1-to-v2.html"
+        diff_path = tmp_path / "local" / "strat-history" / "RHAISTRAT-100" / "v0-to-v1.html"
         html = diff_path.read_text()
         assert "REST" in html
         assert "gRPC" in html
@@ -339,18 +379,22 @@ class TestSaveCommand:
 
 class TestFirstRun:
 
-    def test_no_prior_versions(self, tmp_path):
+    def test_pull_then_refine_full_flow(self, tmp_path):
         strat_dir = tmp_path / "local" / "strat-tasks"
         strat_dir.mkdir(parents=True)
         strat_path = str(strat_dir / "RHAISTRAT-100.md")
-        _make_strategy_file(strat_path, SAMPLE_STRATEGY_V1)
 
-        result = save(strat_path)
-        assert result == 0
+        _make_strategy_file(strat_path, SAMPLE_STRATEGY_V1)
+        save(strat_path)  # pull → v0
+
+        snapshot(strat_path)
+        _make_strategy_file(strat_path, SAMPLE_STRATEGY_V2)
+        save(strat_path)  # refine → v1
 
         history_dir = tmp_path / "local" / "strat-history" / "RHAISTRAT-100"
+        assert (history_dir / "v0.md").exists()
         assert (history_dir / "v1.md").exists()
-        assert not list(history_dir.glob("v*-to-v*.html"))
+        assert (history_dir / "v0-to-v1.html").exists()
 
     def test_nonexistent_file_returns_error(self):
         result = save("/nonexistent/path/RHAISTRAT-999.md")
@@ -359,22 +403,19 @@ class TestFirstRun:
 
 class TestIdempotency:
 
-    def test_save_twice_without_changes_creates_two_versions(self, tmp_path):
-        """Even without content changes, each save creates a new version.
-        The diff will show no changes in any section."""
+    def test_snapshot_save_no_real_changes(self, tmp_path):
+        """Snapshot + save where refine didn't change anything — diff shows no changes."""
         strat_dir = tmp_path / "local" / "strat-tasks"
         strat_dir.mkdir(parents=True)
         strat_path = str(strat_dir / "RHAISTRAT-100.md")
         _make_strategy_file(strat_path, SAMPLE_STRATEGY_V1)
 
-        save(strat_path)
-        save(strat_path)
+        save(strat_path)  # pull → v0
+        snapshot(strat_path)
+        save(strat_path)  # refine (no changes) → v1
 
         history_dir = tmp_path / "local" / "strat-history" / "RHAISTRAT-100"
-        assert (history_dir / "v1.md").exists()
-        assert (history_dir / "v2.md").exists()
-
-        diff_path = history_dir / "v1-to-v2.html"
+        diff_path = history_dir / "v0-to-v1.html"
         assert diff_path.exists()
         html = diff_path.read_text()
         assert "<del " not in html
