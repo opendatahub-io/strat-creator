@@ -60,8 +60,8 @@ def _setup_strat_with_rfe(jira, strat_key, rfe_key, labels=None):
 
     jira.request("POST", "/rest/api/3/issueLink", {
         "type": {"name": "Cloners"},
-        "inwardIssue": {"key": strat_key},
-        "outwardIssue": {"key": rfe_key},
+        "inwardIssue": {"key": rfe_key},
+        "outwardIssue": {"key": strat_key},
     })
 
 
@@ -236,8 +236,8 @@ class TestPullWithStrategyAttachment:
                      "Users need cost-efficient GPU sharing.")
         jira.request("POST", "/rest/api/3/issueLink", {
             "type": {"name": "Cloners"},
-            "inwardIssue": {"key": "RHAISTRAT-2040"},
-            "outwardIssue": {"key": "RHAIRFE-3040"},
+            "inwardIssue": {"key": "RHAIRFE-3040"},
+            "outwardIssue": {"key": "RHAISTRAT-2040"},
         })
 
         full_strategy = (
@@ -279,8 +279,8 @@ class TestPullWithStrategyAttachment:
         jira.create("RHAIRFE-3041", "GPU RFE", "GPU sharing needed.")
         jira.request("POST", "/rest/api/3/issueLink", {
             "type": {"name": "Cloners"},
-            "inwardIssue": {"key": "RHAISTRAT-2041"},
-            "outwardIssue": {"key": "RHAIRFE-3041"},
+            "inwardIssue": {"key": "RHAIRFE-3041"},
+            "outwardIssue": {"key": "RHAISTRAT-2041"},
         })
 
         local_dir = tmp_path / "local"
@@ -301,8 +301,8 @@ class TestPullWithStrategyAttachment:
         jira.create("RHAIRFE-3042", "RFE for round trip", "Some RFE.")
         jira.request("POST", "/rest/api/3/issueLink", {
             "type": {"name": "Cloners"},
-            "inwardIssue": {"key": "RHAISTRAT-2042"},
-            "outwardIssue": {"key": "RHAIRFE-3042"},
+            "inwardIssue": {"key": "RHAIRFE-3042"},
+            "outwardIssue": {"key": "RHAISTRAT-2042"},
         })
 
         push_script = os.path.join(PROJECT_ROOT, "scripts", "push_strategy.py")
@@ -361,8 +361,8 @@ class TestPullRfeReconstruction:
                      "Users need cost-efficient GPU sharing across tenants.")
         jira.request("POST", "/rest/api/3/issueLink", {
             "type": {"name": "Cloners"},
-            "inwardIssue": {"key": "RHAISTRAT-2050"},
-            "outwardIssue": {"key": "RHAIRFE-3050"},
+            "inwardIssue": {"key": "RHAIRFE-3050"},
+            "outwardIssue": {"key": "RHAISTRAT-2050"},
         })
 
         local_dir = tmp_path / "local"
@@ -401,8 +401,8 @@ class TestPullRfeReconstruction:
                      "Users need multi-model serving with GPU sharing.")
         jira.request("POST", "/rest/api/3/issueLink", {
             "type": {"name": "Cloners"},
-            "inwardIssue": {"key": "RHAISTRAT-2052"},
-            "outwardIssue": {"key": "RHAIRFE-3052"},
+            "inwardIssue": {"key": "RHAIRFE-3052"},
+            "outwardIssue": {"key": "RHAISTRAT-2052"},
         })
 
         push_script = os.path.join(PROJECT_ROOT, "scripts", "push_strategy.py")
@@ -471,8 +471,8 @@ class TestPullRfeReconstruction:
                      "Users need automated ML pipelines.")
         jira.request("POST", "/rest/api/3/issueLink", {
             "type": {"name": "Cloners"},
-            "inwardIssue": {"key": "RHAISTRAT-2053"},
-            "outwardIssue": {"key": "RHAIRFE-3053"},
+            "inwardIssue": {"key": "RHAIRFE-3053"},
+            "outwardIssue": {"key": "RHAISTRAT-2053"},
         })
 
         push_script = os.path.join(PROJECT_ROOT, "scripts", "push_strategy.py")
@@ -519,8 +519,8 @@ class TestPullRfeReconstruction:
                      "Users need real-time model drift detection.")
         jira.request("POST", "/rest/api/3/issueLink", {
             "type": {"name": "Cloners"},
-            "inwardIssue": {"key": "RHAISTRAT-2054"},
-            "outwardIssue": {"key": "RHAIRFE-3054"},
+            "inwardIssue": {"key": "RHAIRFE-3054"},
+            "outwardIssue": {"key": "RHAISTRAT-2054"},
         })
 
         push_script = os.path.join(PROJECT_ROOT, "scripts", "push_strategy.py")
@@ -596,8 +596,8 @@ class TestPullRfeReconstruction:
                      "Users need multi-model serving with autoscaling.")
         jira.request("POST", "/rest/api/3/issueLink", {
             "type": {"name": "Cloners"},
-            "inwardIssue": {"key": "RHAISTRAT-2061"},
-            "outwardIssue": {"key": "RHAIRFE-3061"},
+            "inwardIssue": {"key": "RHAIRFE-3061"},
+            "outwardIssue": {"key": "RHAISTRAT-2061"},
         })
 
         full_strategy = (

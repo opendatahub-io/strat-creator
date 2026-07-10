@@ -233,8 +233,8 @@ class TestScenarioB:
         # Create Cloners link
         jira.request("POST", "/rest/api/3/issueLink", {
             "type": {"name": "Cloners"},
-            "inwardIssue": {"key": "RHAISTRAT-5000"},
-            "outwardIssue": {"key": "RHAIRFE-3000"},
+            "inwardIssue": {"key": "RHAIRFE-3000"},
+            "outwardIssue": {"key": "RHAISTRAT-5000"},
         })
 
         # 2. Verify existing STRAT found

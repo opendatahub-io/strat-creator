@@ -31,8 +31,8 @@ def _run(jira, args, env_override=None):
 def _create_cloners_link(jira, strat_key, rfe_key):
     jira.request("POST", "/rest/api/3/issueLink", {
         "type": {"name": "Cloners"},
-        "inwardIssue": {"key": strat_key},
-        "outwardIssue": {"key": rfe_key},
+        "inwardIssue": {"key": rfe_key},
+        "outwardIssue": {"key": strat_key},
     })
 
 

@@ -62,6 +62,38 @@ class TestCloneIssue:
                     linked_keys.append(issue["key"])
         assert "RHAIRFE-1000" in linked_keys
 
+    def test_clone_link_direction_strategy_is_outward(self, jira):
+        """The strategy must be the outward (cloning) side of the link."""
+        jira.create("RHAIRFE-1010", "Direction test RFE",
+                     "Verify clone link direction.")
+
+        result = _run(jira, ["RHAIRFE-1010", "--target-project", "RHAISTRAT"])
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+        strat_key = result.stdout.strip()
+
+        # The emulator's GET response uses the key name to indicate which
+        # DB column the current issue occupies: "outwardIssue" means the
+        # current issue is outward_issue_id, "inwardIssue" means inward.
+        strat = jira.get(strat_key)
+        strat_links = [
+            lk for lk in strat["fields"].get("issuelinks", [])
+            if lk.get("type", {}).get("name") == "Cloners"
+        ]
+        assert len(strat_links) == 1
+        lk = strat_links[0]
+        assert "outwardIssue" in lk, (
+            "strategy should be the outward side (clones the RFE)")
+
+        rfe = jira.get("RHAIRFE-1010")
+        rfe_links = [
+            lk for lk in rfe["fields"].get("issuelinks", [])
+            if lk.get("type", {}).get("name") == "Cloners"
+        ]
+        assert len(rfe_links) == 1
+        lk = rfe_links[0]
+        assert "inwardIssue" in lk, (
+            "RFE should be the inward side (is cloned by the strategy)")
+
     def test_labels_are_copied_to_clone(self, jira):
         jira.create("RHAIRFE-1001", "Model serving autoscaler",
                      "Autoscale model serving pods.",

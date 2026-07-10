@@ -121,11 +121,11 @@ def main():
         parent_key=parent_key,
     )
 
-    # Cloners link: new issue "is cloned by" source (STRAT is the clone of the RFE)
+    # The generated strategy clones the source RFE.
     create_issue_link(server, user, token,
                       type_name="Cloners",
-                      inward_key=new_key,
-                      outward_key=args.source_key)
+                      inward_key=args.source_key,
+                      outward_key=new_key)
 
     print(new_key)
 

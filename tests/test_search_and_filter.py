@@ -80,8 +80,8 @@ class TestSearchIssues:
         jira.create("RHAISTRAT-540", "Clone", "Clone desc")
         jira.request("POST", "/rest/api/3/issueLink", {
             "type": {"name": "Cloners"},
-            "inwardIssue": {"key": "RHAISTRAT-540"},
-            "outwardIssue": {"key": "RHAIRFE-540"},
+            "inwardIssue": {"key": "RHAIRFE-540"},
+            "outwardIssue": {"key": "RHAISTRAT-540"},
         })
 
         issues = search_issues(
@@ -270,8 +270,8 @@ class TestFindProcessedRfeIds:
                      f"Strategy description for {strat_key}")
         jira.request("POST", "/rest/api/3/issueLink", {
             "type": {"name": "Cloners"},
-            "inwardIssue": {"key": strat_key},
-            "outwardIssue": {"key": rfe_key},
+            "inwardIssue": {"key": rfe_key},
+            "outwardIssue": {"key": strat_key},
         })
         if labels:
             for label in labels:
