@@ -293,6 +293,23 @@ def _resolve_history_dir(strategy_path):
     return history_dir, strat_id
 
 
+def reset(strategy_path):
+    """Archive existing history to a timestamped folder before a fresh pull."""
+    if not os.path.isfile(strategy_path):
+        print(f"Error: file not found: {strategy_path}", file=sys.stderr)
+        return 1
+
+    history_dir, strat_id = _resolve_history_dir(strategy_path)
+    if not os.path.isdir(history_dir) or find_latest_version(history_dir) < 0:
+        return 0
+
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    archive_dir = f"{history_dir}-{timestamp}"
+    shutil.move(history_dir, archive_dir)
+    print(f"Archived {strat_id} history to {archive_dir}", file=sys.stderr)
+    return 0
+
+
 def snapshot(strategy_path):
     """Save a pre-refine snapshot so `save` can diff against it."""
     if not os.path.isfile(strategy_path):
@@ -372,6 +389,9 @@ def main():
     )
     sub = parser.add_subparsers(dest="command")
 
+    reset_parser = sub.add_parser("reset", help="Archive existing history before a fresh pull")
+    reset_parser.add_argument("strategy_file", help="Path to the strategy file")
+
     snap_parser = sub.add_parser("snapshot", help="Save pre-refine snapshot")
     snap_parser.add_argument("strategy_file", help="Path to the strategy file")
 
@@ -379,7 +399,9 @@ def main():
     save_parser.add_argument("strategy_file", help="Path to the strategy file")
 
     args = parser.parse_args()
-    if args.command == "snapshot":
+    if args.command == "reset":
+        sys.exit(reset(args.strategy_file))
+    elif args.command == "snapshot":
         sys.exit(snapshot(args.strategy_file))
     elif args.command == "save":
         sys.exit(save(args.strategy_file))

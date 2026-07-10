@@ -13,6 +13,7 @@ from strategy_history import (
     has_changes,
     diff_to_html,
     generate_diff_html,
+    reset,
     snapshot,
     save,
     STRATEGY_HEADING,
@@ -398,6 +399,75 @@ class TestFirstRun:
 
     def test_nonexistent_file_returns_error(self):
         result = save("/nonexistent/path/RHAISTRAT-999.md")
+        assert result == 1
+
+
+class TestResetCommand:
+
+    def test_reset_noop_when_no_history(self, tmp_path):
+        """Reset does nothing when no history directory exists."""
+        strat_dir = tmp_path / "local" / "strat-tasks"
+        strat_dir.mkdir(parents=True)
+        strat_path = str(strat_dir / "RHAISTRAT-100.md")
+        _make_strategy_file(strat_path, SAMPLE_STRATEGY_V1)
+
+        result = reset(strat_path)
+        assert result == 0
+        history_dir = tmp_path / "local" / "strat-history" / "RHAISTRAT-100"
+        assert not history_dir.exists()
+
+    def test_reset_archives_existing_history(self, tmp_path):
+        """Reset moves existing history to a timestamped folder."""
+        strat_dir = tmp_path / "local" / "strat-tasks"
+        strat_dir.mkdir(parents=True)
+        strat_path = str(strat_dir / "RHAISTRAT-100.md")
+        _make_strategy_file(strat_path, SAMPLE_STRATEGY_V1)
+
+        save(strat_path)  # v0
+        snapshot(strat_path)
+        _make_strategy_file(strat_path, SAMPLE_STRATEGY_V2)
+        save(strat_path)  # v1
+
+        history_dir = tmp_path / "local" / "strat-history" / "RHAISTRAT-100"
+        assert (history_dir / "v0.md").exists()
+        assert (history_dir / "v1.md").exists()
+
+        result = reset(strat_path)
+        assert result == 0
+
+        assert not history_dir.exists()
+
+        parent = tmp_path / "local" / "strat-history"
+        archived = [d for d in parent.iterdir() if d.name.startswith("RHAISTRAT-100-")]
+        assert len(archived) == 1
+        assert (archived[0] / "v0.md").exists()
+        assert (archived[0] / "v1.md").exists()
+
+    def test_fresh_save_after_reset_creates_v0(self, tmp_path):
+        """After reset, the next save creates v0 (fresh baseline)."""
+        strat_dir = tmp_path / "local" / "strat-tasks"
+        strat_dir.mkdir(parents=True)
+        strat_path = str(strat_dir / "RHAISTRAT-100.md")
+        _make_strategy_file(strat_path, SAMPLE_STRATEGY_V1)
+
+        save(strat_path)  # v0
+        snapshot(strat_path)
+        _make_strategy_file(strat_path, SAMPLE_STRATEGY_V2)
+        save(strat_path)  # v1
+
+        reset(strat_path)
+
+        _make_strategy_file(strat_path, SAMPLE_STRATEGY_V2)
+        result = save(strat_path)
+        assert result == 0
+
+        history_dir = tmp_path / "local" / "strat-history" / "RHAISTRAT-100"
+        assert (history_dir / "v0.md").exists()
+        assert not (history_dir / "v1.md").exists()
+        assert not list(history_dir.glob("*.html"))
+
+    def test_reset_nonexistent_file_returns_error(self):
+        result = reset("/nonexistent/path/RHAISTRAT-999.md")
         assert result == 1
 
 
