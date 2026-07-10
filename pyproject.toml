@@ -5,6 +5,7 @@ description = "Skills for creating, refining, and reviewing strategy documents f
 requires-python = ">=3.11"
 dependencies = [
     "certifi",
+    "diff-match-patch",
     "pyyaml",
 ]
 

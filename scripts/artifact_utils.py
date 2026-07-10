@@ -175,6 +175,11 @@ SCHEMAS = {
             "enum": ["local", "ci"],
             "default": None,
         },
+        "latest_diff": {
+            "type": "string",
+            "required": False,
+            "default": None,
+        },
     },
     "strat-review": {
         "strat_id": {
