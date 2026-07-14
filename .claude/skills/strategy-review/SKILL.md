@@ -86,7 +86,7 @@ rm -rf /tmp/strat-assess/review
 mkdir -p /tmp/strat-assess/review
 ```
 
-Spawn one agent (model: opus, run_in_background: true) with this prompt:
+Spawn one agent (model: opus, run_in_background: true, subagent_type: assess-strat:strat-scorer) with this prompt:
 
 ```
 You are a strategy quality assessor. Your task:
