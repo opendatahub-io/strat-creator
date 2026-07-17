@@ -10,11 +10,14 @@ from push_strategy import (
     extract_source_rfe,
     _build_description_stub,
     _find_strategy_attachment,
+    _find_staff_input_attachment,
     STRATEGY_HEADING,
     STAFF_INPUT_HEADING,
     ATTACHMENT_NOTICE,
     ATTACHMENT_NOTICE_NO_TLDR,
     STRATEGY_ATTACHMENT_TEMPLATE,
+    STAFF_INPUT_ATTACHMENT_TEMPLATE,
+    STAFF_INPUT_ATTACHMENT_NOTICE,
 )
 from jira_utils import (
     build_rfe_reference,
@@ -358,15 +361,15 @@ class TestBuildDescriptionStub:
             existing_md, strategy_section, None, "RHAISTRAT-1000-strategy.md")
         assert "Critical business context that must be preserved" in result
 
-    def test_stub_includes_staff_input(self):
+    def test_stub_includes_staff_input_attachment_notice(self):
         existing_md = "## Business Need\n\nContext.\n"
         strategy_section = f"{STRATEGY_HEADING}\n\nStrategy.\n"
-        staff_input = f"{STAFF_INPUT_HEADING}\n\nEngineer notes.\n"
         result = _build_description_stub(
-            existing_md, strategy_section, staff_input,
-            "RHAISTRAT-1000-strategy.md")
+            existing_md, strategy_section, "RHAISTRAT-1000-strategy.md",
+            staff_input_attachment_filename="RHAISTRAT-1000-staff-input.md")
         assert STAFF_INPUT_HEADING in result
-        assert "Engineer notes." in result
+        assert "RHAISTRAT-1000-staff-input.md" in result
+        assert "stored as attachment" in result
 
     def test_stub_adds_staff_input_template_when_missing(self):
         existing_md = "## Business Need\n\nContext.\n"
@@ -381,12 +384,13 @@ class TestBuildDescriptionStub:
             f"{STAFF_INPUT_HEADING}\n\nExisting notes.\n"
         )
         strategy_section = f"{STRATEGY_HEADING}\n\nStrategy.\n"
-        staff_input = f"{STAFF_INPUT_HEADING}\n\nUpdated notes.\n"
         result = _build_description_stub(
-            existing_md, strategy_section, staff_input,
-            "RHAISTRAT-1000-strategy.md")
-        count = result.count("Staff Engineer / SME Input")
+            existing_md, strategy_section, "RHAISTRAT-1000-strategy.md",
+            staff_input_attachment_filename="RHAISTRAT-1000-staff-input.md")
+        count = result.count(STAFF_INPUT_HEADING)
         assert count == 1
+        assert "Existing notes" not in result
+        assert "RHAISTRAT-1000-staff-input.md" in result
 
 
 class TestFindStrategyAttachment:
@@ -416,6 +420,36 @@ class TestFindStrategyAttachment:
             {"filename": "RHAISTRAT-2000-strategy.md", "id": "300"},
         ]
         result = _find_strategy_attachment(attachments, "RHAISTRAT-1000")
+        assert result is None
+
+
+class TestFindStaffInputAttachment:
+
+    def test_finds_matching_attachment(self):
+        attachments = [
+            {"filename": "RHAISTRAT-1000-strategy.md", "id": "100"},
+            {"filename": "RHAISTRAT-1000-staff-input.md", "id": "200"},
+        ]
+        result = _find_staff_input_attachment(attachments, "RHAISTRAT-1000")
+        assert result is not None
+        assert result["id"] == "200"
+
+    def test_returns_none_when_no_match(self):
+        attachments = [
+            {"filename": "RHAISTRAT-1000-strategy.md", "id": "100"},
+        ]
+        result = _find_staff_input_attachment(attachments, "RHAISTRAT-1000")
+        assert result is None
+
+    def test_returns_none_for_empty_list(self):
+        result = _find_staff_input_attachment([], "RHAISTRAT-1000")
+        assert result is None
+
+    def test_matches_correct_issue_key(self):
+        attachments = [
+            {"filename": "RHAISTRAT-2000-staff-input.md", "id": "300"},
+        ]
+        result = _find_staff_input_attachment(attachments, "RHAISTRAT-1000")
         assert result is None
 
 
