@@ -327,7 +327,7 @@ class TestBuildDescriptionStub:
             "Use MIG.\n"
         )
         result = _build_description_stub(
-            existing_md, strategy_section, None, "RHAISTRAT-1000-strategy.md")
+            existing_md, strategy_section, "RHAISTRAT-1000-strategy.md")
         assert "Business Need" in result
         assert "Users need GPU sharing" in result
         assert STRATEGY_HEADING in result
@@ -344,7 +344,7 @@ class TestBuildDescriptionStub:
             "Details.\n"
         )
         result = _build_description_stub(
-            existing_md, strategy_section, None, "RHAISTRAT-1000-strategy.md")
+            existing_md, strategy_section, "RHAISTRAT-1000-strategy.md")
         assert STRATEGY_HEADING in result
         assert "### TL;DR" not in result
         assert "RHAISTRAT-1000-strategy.md" in result
@@ -358,7 +358,7 @@ class TestBuildDescriptionStub:
         )
         strategy_section = f"{STRATEGY_HEADING}\n\nNew strategy.\n"
         result = _build_description_stub(
-            existing_md, strategy_section, None, "RHAISTRAT-1000-strategy.md")
+            existing_md, strategy_section, "RHAISTRAT-1000-strategy.md")
         assert "Critical business context that must be preserved" in result
 
     def test_stub_includes_staff_input_attachment_notice(self):
@@ -375,7 +375,7 @@ class TestBuildDescriptionStub:
         existing_md = "## Business Need\n\nContext.\n"
         strategy_section = f"{STRATEGY_HEADING}\n\nStrategy.\n"
         result = _build_description_stub(
-            existing_md, strategy_section, None, "RHAISTRAT-1000-strategy.md")
+            existing_md, strategy_section, "RHAISTRAT-1000-strategy.md")
         assert STAFF_INPUT_HEADING in result
 
     def test_stub_does_not_duplicate_staff_input(self):

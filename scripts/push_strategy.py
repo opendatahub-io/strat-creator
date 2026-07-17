@@ -189,7 +189,7 @@ def _upload_staff_input_attachment(server, user, token, issue_key,
             try:
                 delete_attachment(server, user, token, old_att["id"])
             except urllib.error.HTTPError as e:
-                if e.code in (403, 404):
+                if e.code == 404:
                     print(f"  WARNING: Could not delete old staff input "
                           f"attachment (HTTP {e.code}).", file=sys.stderr)
                 else:
@@ -251,7 +251,7 @@ def _push_via_attachment(server, user, token, issue_key, existing_md,
             try:
                 delete_attachment(server, user, token, old_att["id"])
             except urllib.error.HTTPError as e:
-                if e.code in (403, 404):
+                if e.code == 404:
                     print(f"  WARNING: Could not delete old attachment "
                           f"(HTTP {e.code}). Uploading new copy.",
                           file=sys.stderr)
