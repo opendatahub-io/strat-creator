@@ -97,12 +97,21 @@ def jira(jira_emu):
 
     # Target Version (customfield_10855) — multi-version picker, stored/returned
     # as a JSON array of {"name": ...} objects (emulated via multiselect type).
-    _orig_cf = seed_service.CUSTOM_FIELDS
-    seed_service.CUSTOM_FIELDS = _orig_cf + [
-        {"field_id": "customfield_10855", "name": "Target Version",
-         "field_type": "multiselect"}
-    ] if not any(cf["field_id"] == "customfield_10855" for cf in _orig_cf) \
-        else _orig_cf
+    _existing_cf = next(
+        (cf for cf in seed_service.CUSTOM_FIELDS
+         if cf["field_id"] == "customfield_10855"), None)
+    if _existing_cf is None:
+        seed_service.CUSTOM_FIELDS = [
+            *seed_service.CUSTOM_FIELDS,
+            {"field_id": "customfield_10855", "name": "Target Version",
+             "field_type": "multiselect"},
+        ]
+    else:
+        # Fail loud if a future emulator seeds this field incompatibly, rather
+        # than silently reusing a definition these tests don't expect.
+        assert _existing_cf["field_type"] == "multiselect", (
+            "customfield_10855 already seeded with field_type "
+            f"{_existing_cf['field_type']!r}; tests expect 'multiselect'")
 
     req = urllib.request.Request(
         f"{jira_emu}/api/admin/reset", method="POST", data=b"")
