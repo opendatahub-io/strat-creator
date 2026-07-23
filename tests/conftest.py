@@ -151,10 +151,12 @@ def jira(jira_emu):
             # Target Version isn't part of the import field map; set it via a
             # REST update so it round-trips like real Jira's customfield_10855.
             if target_versions:
+                # Accept plain names or full version objects ({"id"/"name": ...}).
+                tv = [v if isinstance(v, dict) else {"name": v}
+                      for v in target_versions]
                 _jira_request(
                     jira_emu, "PUT", f"/rest/api/3/issue/{key}",
-                    {"fields": {"customfield_10855": [
-                        {"name": v} for v in target_versions]}})
+                    {"fields": {"customfield_10855": tv}})
 
         @staticmethod
         def get(key):

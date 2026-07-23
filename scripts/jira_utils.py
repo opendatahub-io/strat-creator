@@ -282,7 +282,10 @@ def create_issue(server, user, token, project, issue_type, summary,
     if affects_versions:
         body["fields"]["versions"] = [{"name": v} for v in affects_versions]
     if target_versions:
-        body["fields"]["customfield_10855"] = [{"name": v} for v in target_versions]
+        # Accept version references as dicts ({"id": ...} / {"name": ...}) or
+        # plain name strings.
+        body["fields"]["customfield_10855"] = [
+            v if isinstance(v, dict) else {"name": v} for v in target_versions]
     if parent_key:
         body["fields"]["parent"] = {"key": parent_key}
     result = api_call_with_retry(server, "/issue", user, token, body=body)
