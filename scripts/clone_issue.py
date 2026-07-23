@@ -104,8 +104,14 @@ def main():
                     if isinstance(v, dict) and "name" in v]
     affects_versions = [v["name"] for v in fields.get("versions", [])
                         if isinstance(v, dict) and "name" in v]
-    target_versions = [v["name"] for v in (fields.get("customfield_10855") or [])
-                       if isinstance(v, dict) and "name" in v]
+    # Target Version (customfield_10855) is a multi-version picker. Prefer the
+    # stable version id over the name so it resolves unambiguously in the
+    # target project; fall back to name when no id is present.
+    target_versions = [
+        {"id": v["id"]} if v.get("id") else {"name": v["name"]}
+        for v in (fields.get("customfield_10855") or [])
+        if isinstance(v, dict) and (v.get("id") or v.get("name"))
+    ]
 
     parent_key = _resolve_parent_outcome(server, user, token, fields)
 

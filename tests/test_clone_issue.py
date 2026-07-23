@@ -114,6 +114,26 @@ class TestCloneIssue:
         names = sorted(v["name"] for v in target)
         assert names == ["3.6 EA1 RHOAI RELEASE", "3.6 GA RHOAI RELEASE"]
 
+    def test_target_version_prefers_id_over_name(self, jira):
+        # Mirrors live Jira, where customfield_10855 returns full version
+        # objects with a stable id (see RHAIRFE-2750).
+        jira.create("RHAIRFE-1004", "Serving GA",
+                     "Promote serving to GA.",
+                     target_versions=[
+                         {"id": "107606", "name": "3.6 GA RHAII RELEASE"},
+                         {"id": "107607", "name": "3.6 GA RHOAI RELEASE"}])
+
+        result = _run(jira, ["RHAIRFE-1004", "--target-project", "RHAISTRAT"])
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+
+        new_key = result.stdout.strip()
+        clone = jira.get(new_key)
+        target = clone["fields"].get("customfield_10855") or []
+        ids = sorted(v["id"] for v in target)
+        assert ids == ["107606", "107607"]
+        # id is preferred; name is not re-sent on the clone
+        assert all("name" not in v for v in target)
+
     def test_clone_inherits_parent_outcome_from_rfe(self, jira):
         jira.create("RHAISTRAT-500", "AI Hub Delivery",
                      "Top-level Outcome.", issue_type="Outcome")
