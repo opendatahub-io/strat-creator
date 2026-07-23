@@ -99,6 +99,21 @@ class TestCloneIssue:
         aff_names = [v["name"] for v in clone_fields.get("versions", [])]
         assert aff_names == ["2.10"]
 
+    def test_target_version_is_copied_to_clone(self, jira):
+        jira.create("RHAIRFE-1003", "Model registry GA",
+                     "Promote model registry to GA.",
+                     target_versions=["3.6 EA1 RHOAI RELEASE",
+                                      "3.6 GA RHOAI RELEASE"])
+
+        result = _run(jira, ["RHAIRFE-1003", "--target-project", "RHAISTRAT"])
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+
+        new_key = result.stdout.strip()
+        clone = jira.get(new_key)
+        target = clone["fields"].get("customfield_10855") or []
+        names = sorted(v["name"] for v in target)
+        assert names == ["3.6 EA1 RHOAI RELEASE", "3.6 GA RHOAI RELEASE"]
+
     def test_clone_inherits_parent_outcome_from_rfe(self, jira):
         jira.create("RHAISTRAT-500", "AI Hub Delivery",
                      "Top-level Outcome.", issue_type="Outcome")

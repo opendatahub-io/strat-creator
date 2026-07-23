@@ -88,7 +88,7 @@ def main():
     source = get_issue(server, user, token, args.source_key,
                        fields=["summary", "description", "priority", "labels",
                                "components", "fixVersions", "versions",
-                               "parent"])
+                               "customfield_10855", "parent"])
     fields = source.get("fields", {})
 
     summary = fields.get("summary", "")
@@ -104,6 +104,8 @@ def main():
                     if isinstance(v, dict) and "name" in v]
     affects_versions = [v["name"] for v in fields.get("versions", [])
                         if isinstance(v, dict) and "name" in v]
+    target_versions = [v["name"] for v in (fields.get("customfield_10855") or [])
+                       if isinstance(v, dict) and "name" in v]
 
     parent_key = _resolve_parent_outcome(server, user, token, fields)
 
@@ -118,6 +120,7 @@ def main():
         components=components,
         fix_versions=fix_versions,
         affects_versions=affects_versions,
+        target_versions=target_versions,
         parent_key=parent_key,
     )
 

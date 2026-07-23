@@ -105,7 +105,7 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/clone_issue.py RHAIRFE-NNNN --target-project
 ```
 
 The script:
-1. Fetches the source RFE (summary, description as raw ADF, priority, labels)
+1. Fetches the source RFE (summary, description as raw ADF, priority, labels, components, fix/affects versions, Target Version `customfield_10855`, parent Outcome)
 2. Creates a new Feature issue in the RHAISTRAT project with the same fields
 3. Creates a Cloners link between the source RFE and the new RHAISTRAT
 4. Prints the new RHAISTRAT key to stdout
