@@ -260,7 +260,8 @@ def add_comment(server, user, token, issue_key, body_adf):
 
 def create_issue(server, user, token, project, issue_type, summary,
                  description_adf, priority, labels=None, components=None,
-                 fix_versions=None, affects_versions=None, parent_key=None):
+                 fix_versions=None, affects_versions=None, target_versions=None,
+                 parent_key=None):
     """POST /rest/api/3/issue — returns the created issue key."""
     body = {
         "fields": {
@@ -280,6 +281,8 @@ def create_issue(server, user, token, project, issue_type, summary,
         body["fields"]["fixVersions"] = [{"name": v} for v in fix_versions]
     if affects_versions:
         body["fields"]["versions"] = [{"name": v} for v in affects_versions]
+    if target_versions:
+        body["fields"]["customfield_10855"] = [{"name": v} for v in target_versions]
     if parent_key:
         body["fields"]["parent"] = {"key": parent_key}
     result = api_call_with_retry(server, "/issue", user, token, body=body)

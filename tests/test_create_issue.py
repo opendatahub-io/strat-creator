@@ -90,6 +90,21 @@ class TestCreateIssue:
         aff_names = [v["name"] for v in issue["fields"].get("versions", [])]
         assert "2.10" in aff_names
 
+    def test_target_versions_are_set(self, jira):
+        key = create_issue(
+            jira.url, "admin", "admin",
+            project="RHAISTRAT",
+            issue_type="Feature",
+            summary="Target-versioned issue",
+            description_adf=ADF_DESC,
+            priority="Major",
+            target_versions=["3.6 EA1 RHOAI RELEASE"],
+        )
+        issue = jira.get(key)
+        target = issue["fields"].get("customfield_10855") or []
+        names = [v["name"] for v in target]
+        assert names == ["3.6 EA1 RHOAI RELEASE"]
+
     def test_parent_key_is_set(self, jira):
         parent_key = create_issue(
             jira.url, "admin", "admin",

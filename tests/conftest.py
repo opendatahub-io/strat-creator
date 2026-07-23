@@ -95,6 +95,15 @@ def jira(jira_emu):
         if lt["name"] not in {x["name"] for x in _orig}
     ]
 
+    # Target Version (customfield_10855) — multi-version picker, stored/returned
+    # as a JSON array of {"name": ...} objects (emulated via multiselect type).
+    _orig_cf = seed_service.CUSTOM_FIELDS
+    seed_service.CUSTOM_FIELDS = _orig_cf + [
+        {"field_id": "customfield_10855", "name": "Target Version",
+         "field_type": "multiselect"}
+    ] if not any(cf["field_id"] == "customfield_10855" for cf in _orig_cf) \
+        else _orig_cf
+
     req = urllib.request.Request(
         f"{jira_emu}/api/admin/reset", method="POST", data=b"")
     urllib.request.urlopen(req)
@@ -105,7 +114,8 @@ def jira(jira_emu):
         @staticmethod
         def create(key, summary, description, labels=None, components=None,
                    fix_versions=None, affects_versions=None,
-                   issue_type=None, parent_key=None, status=None):
+                   target_versions=None, issue_type=None, parent_key=None,
+                   status=None):
             """Import an issue with a specific key."""
             issue = {
                 "key": key,
@@ -129,6 +139,13 @@ def jira(jira_emu):
                 issue["status"] = status
             _jira_request(jira_emu, "POST", "/api/admin/import",
                           {"issues": [issue]})
+            # Target Version isn't part of the import field map; set it via a
+            # REST update so it round-trips like real Jira's customfield_10855.
+            if target_versions:
+                _jira_request(
+                    jira_emu, "PUT", f"/rest/api/3/issue/{key}",
+                    {"fields": {"customfield_10855": [
+                        {"name": v} for v in target_versions]}})
 
         @staticmethod
         def get(key):
