@@ -206,6 +206,7 @@ def build_jql_from_config(config_path):
     required = jql_cfg.get("required_labels", [])
     target_versions = jql_cfg.get("target_versions", [])
     quality = jql_cfg.get("quality_labels", [])
+    excluded_labels = jql_cfg.get("excluded_labels", [])
     excluded = jql_cfg.get("excluded_statuses", [])
     order = jql_cfg.get("order_by", "key ASC")
 
@@ -227,6 +228,9 @@ def build_jql_from_config(config_path):
     if quality:
         quality_clause = " OR ".join(f'labels = "{l}"' for l in quality)
         clauses.append(f'({quality_clause})')
+    if excluded_labels:
+        labels_csv = ", ".join(f'"{l}"' for l in excluded_labels)
+        clauses.append(f'(labels NOT IN ({labels_csv}) OR labels IS EMPTY)')
     if excluded:
         status_clause = ", ".join(f'"{s}"' for s in excluded)
         clauses.append(f'status NOT IN ({status_clause})')

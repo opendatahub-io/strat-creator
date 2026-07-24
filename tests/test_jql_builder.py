@@ -236,6 +236,70 @@ jql:
         assert 'cf[10855] in ("rhoai-3.5")' in jql
         assert "labels = " not in jql.split("AND")[1] or "tech-reviewed" in jql
 
+    def test_excluded_labels(self, tmp_path):
+        config = self._write_config(tmp_path, """\
+jql:
+  project: RHAIRFE
+  required_labels: []
+  quality_labels: []
+  excluded_labels:
+    - strat-creator-processing
+  excluded_statuses: []
+  order_by: key ASC
+""")
+        jql = build_jql_from_config(config)
+        assert ('(labels NOT IN ("strat-creator-processing")'
+                ' OR labels IS EMPTY)') in jql
+
+    def test_multiple_excluded_labels(self, tmp_path):
+        config = self._write_config(tmp_path, """\
+jql:
+  project: RHAIRFE
+  required_labels: []
+  quality_labels: []
+  excluded_labels:
+    - lock-a
+    - lock-b
+  excluded_statuses: []
+  order_by: key ASC
+""")
+        jql = build_jql_from_config(config)
+        assert ('(labels NOT IN ("lock-a", "lock-b")'
+                ' OR labels IS EMPTY)') in jql
+
+    def test_excluded_labels_omitted(self, tmp_path):
+        config = self._write_config(tmp_path, """\
+jql:
+  project: RHAIRFE
+  required_labels:
+    - some-label
+  quality_labels: []
+  excluded_statuses: []
+  order_by: key ASC
+""")
+        jql = build_jql_from_config(config)
+        assert "labels NOT IN" not in jql
+
+    def test_excluded_labels_clause_ordering(self, tmp_path):
+        config = self._write_config(tmp_path, """\
+jql:
+  project: RHAIRFE
+  required_labels:
+    - label-a
+  quality_labels:
+    - label-b
+  excluded_labels:
+    - strat-creator-processing
+  excluded_statuses:
+    - Closed
+  order_by: key ASC
+""")
+        jql = build_jql_from_config(config)
+        qual_pos = jql.index('labels = "label-b"')
+        lock_pos = jql.index("labels NOT IN")
+        status_pos = jql.index("status NOT IN")
+        assert qual_pos < lock_pos < status_pos
+
     def test_target_versions_empty_list(self, tmp_path):
         config = self._write_config(tmp_path, """\
 jql:
