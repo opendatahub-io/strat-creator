@@ -41,13 +41,20 @@ def make_request(url, user, token, body=None, method=None):
         headers["Content-Type"] = "application/json"
         data = json.dumps(body).encode()
     req = urllib.request.Request(url, data=data, headers=headers, method=method)
-    with urllib.request.urlopen(req, timeout=60, context=ssl_ctx) as resp:
-        if resp.status == 204:
-            return None
-        resp_body = resp.read()
-        if not resp_body:
-            return None
-        return json.loads(resp_body)
+    try:
+        with urllib.request.urlopen(req, timeout=60, context=ssl_ctx) as resp:
+            if resp.status == 204:
+                return None
+            resp_body = resp.read()
+            if not resp_body:
+                return None
+            return json.loads(resp_body)
+    except urllib.error.HTTPError as e:
+        if e.code in (301, 302, 303, 307, 308):
+            redirect_url = e.headers.get("Location")
+            if redirect_url:
+                return make_request(redirect_url, user, token, body, method)
+        raise
 
 
 def api_call(server, path, user, token, body=None, method=None):
