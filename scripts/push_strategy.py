@@ -43,6 +43,7 @@ STAFF_INPUT_TEMPLATE = """## Staff Engineer / SME Input
 *Add technical corrections, architectural direction, component preferences, or domain expertise below. Write in declarative, cumulative form — statements that remain valid across refinement iterations. This input takes priority over architecture context when they conflict. After review: address findings, then remove the needs-attention label from Jira.*"""
 
 STRATEGY_ATTACHMENT_TEMPLATE = "{issue_key}-strategy.md"
+STAFF_INPUT_ATTACHMENT_TEMPLATE = "{issue_key}-staff-input.md"
 ATTACHMENT_NOTICE = (
     "> **Note:** The full strategy exceeds Jira's description size limit "
     "and is stored as an attachment: `{filename}`. "
@@ -51,6 +52,10 @@ ATTACHMENT_NOTICE = (
 ATTACHMENT_NOTICE_NO_TLDR = (
     "> **Note:** The full strategy exceeds Jira's description size limit "
     "and is stored as an attachment: `{filename}`."
+)
+STAFF_INPUT_ATTACHMENT_NOTICE = (
+    "> **Note:** Staff Engineer / SME Input is stored as attachment: "
+    "`{filename}`."
 )
 
 
@@ -104,16 +109,15 @@ def extract_tldr_section(strategy_section):
     return match.group(1).strip()
 
 
-def _build_description_stub(existing_md, strategy_section, staff_input_section,
-                            attachment_filename):
+def _build_description_stub(existing_md, strategy_section,
+                            attachment_filename,
+                            staff_input_attachment_filename=None):
     """Build a reduced description with TL;DR stub instead of full strategy."""
     if STRATEGY_HEADING in existing_md:
         before_strategy = existing_md[:existing_md.index(STRATEGY_HEADING)]
     else:
         before_strategy = existing_md
 
-    # Remove any trailing Staff Engineer / SME Input from before_strategy
-    # (it will be re-added at the end)
     staff_match = re.search(STAFF_INPUT_PATTERN, before_strategy)
     if staff_match:
         before_strategy = before_strategy[:staff_match.start()]
@@ -136,8 +140,10 @@ def _build_description_stub(existing_md, strategy_section, staff_input_section,
     parts = [before_strategy.rstrip()]
     parts.append(stub_strategy)
 
-    if staff_input_section:
-        parts.append(staff_input_section)
+    if staff_input_attachment_filename:
+        si_notice = STAFF_INPUT_ATTACHMENT_NOTICE.format(
+            filename=staff_input_attachment_filename)
+        parts.append(f"{STAFF_INPUT_HEADING}\n\n{si_notice}")
     elif not re.search(STAFF_INPUT_PATTERN, before_strategy):
         parts.append(STAFF_INPUT_TEMPLATE)
 
@@ -160,13 +166,78 @@ def _find_strategy_attachment(attachments, issue_key):
     return None
 
 
+def _find_staff_input_attachment(attachments, issue_key):
+    """Find an existing staff input attachment by naming convention."""
+    filename = STAFF_INPUT_ATTACHMENT_TEMPLATE.format(issue_key=issue_key)
+    for att in attachments:
+        if att.get("filename") == filename:
+            return att
+    return None
+
+
+def _upload_staff_input_attachment(server, user, token, issue_key,
+                                   staff_input_section, attachments):
+    """Upload Staff Input as a separate attachment, replacing any existing one."""
+    att_filename = STAFF_INPUT_ATTACHMENT_TEMPLATE.format(issue_key=issue_key)
+    with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".md", delete=False, encoding="utf-8") as tmp:
+        tmp.write(staff_input_section + "\n")
+        tmp_path = tmp.name
+    try:
+        old_att = _find_staff_input_attachment(attachments, issue_key)
+        if old_att:
+            try:
+                delete_attachment(server, user, token, old_att["id"])
+            except urllib.error.HTTPError as e:
+                if e.code == 404:
+                    print(f"  WARNING: Could not delete old staff input "
+                          f"attachment (HTTP {e.code}).", file=sys.stderr)
+                else:
+                    raise
+        add_attachment(server, user, token, issue_key,
+                       tmp_path, filename=att_filename)
+    finally:
+        os.unlink(tmp_path)
+    return att_filename
+
+
+def _delete_staff_input_attachment(server, user, token, issue_key, attachments):
+    """Delete orphaned staff input attachment if it exists."""
+    old_att = _find_staff_input_attachment(attachments, issue_key)
+    if old_att:
+        delete_attachment(server, user, token, old_att["id"])
+        print(f"  Removed previous staff input attachment "
+              f"(content now fits in description)", file=sys.stderr)
+
+
+def _replace_staff_input_with_notice(updated_md, issue_key):
+    """Replace the Staff Input section in markdown with an attachment notice."""
+    att_filename = STAFF_INPUT_ATTACHMENT_TEMPLATE.format(issue_key=issue_key)
+    notice = STAFF_INPUT_ATTACHMENT_NOTICE.format(filename=att_filename)
+    staff_stub = f"{STAFF_INPUT_HEADING}\n\n{notice}"
+    if re.search(STAFF_INPUT_PATTERN, updated_md):
+        return re.sub(
+            STAFF_INPUT_PATTERN + r'.*?(?=\n## (?!#)|$)',
+            staff_stub + "\n",
+            updated_md,
+            flags=re.DOTALL,
+        )
+    return updated_md.rstrip() + "\n\n" + staff_stub
+
+
 def _push_via_attachment(server, user, token, issue_key, existing_md,
-                         strategy_section, staff_input_section, attachments):
-    """Push strategy as attachment + stub description."""
+                         strategy_section, attachments,
+                         staff_input_already_attached=False):
+    """Push strategy as attachment + stub description (tier 3)."""
     att_filename = STRATEGY_ATTACHMENT_TEMPLATE.format(issue_key=issue_key)
 
+    si_att_filename = (
+        STAFF_INPUT_ATTACHMENT_TEMPLATE.format(issue_key=issue_key)
+        if staff_input_already_attached else None
+    )
     stub_md = _build_description_stub(
-        existing_md, strategy_section, staff_input_section, att_filename)
+        existing_md, strategy_section, att_filename,
+        staff_input_attachment_filename=si_att_filename)
     stub_adf = markdown_to_adf(stub_md)
     update_description(server, user, token, issue_key, stub_adf)
 
@@ -180,7 +251,7 @@ def _push_via_attachment(server, user, token, issue_key, existing_md,
             try:
                 delete_attachment(server, user, token, old_att["id"])
             except urllib.error.HTTPError as e:
-                if e.code in (403, 404):
+                if e.code == 404:
                     print(f"  WARNING: Could not delete old attachment "
                           f"(HTTP {e.code}). Uploading new copy.",
                           file=sys.stderr)
@@ -266,31 +337,73 @@ def main():
 
     updated_adf = markdown_to_adf(updated_md)
 
+    # --- Tier 1: try full inline (strategy + staff input) ---
+    staff_input_attached = False
     try:
         update_description(server, user, token, args.issue_key, updated_adf)
     except urllib.error.HTTPError as e:
-        if e.code == 400:
-            error_body = getattr(e, "error_body", "") or e.read().decode("utf-8", errors="replace")
-            if "CONTENT_LIMIT_EXCEEDED" in error_body:
-                adf_size = len(json.dumps(updated_adf))
-                print(f"  Jira rejected description (CONTENT_LIMIT_EXCEEDED, "
-                      f"{adf_size:,} chars ADF). Falling back to attachment.",
-                      file=sys.stderr)
-                _push_via_attachment(server, user, token, args.issue_key,
-                                     updated_md, strategy_section,
-                                     staff_input_section, attachments)
-                return
-        raise
+        if e.code != 400:
+            raise
+        error_body = getattr(e, "error_body", "") or e.read().decode(
+            "utf-8", errors="replace")
+        if "CONTENT_LIMIT_EXCEEDED" not in error_body:
+            raise
 
-    # Clean up orphan attachment if strategy now fits in description
+        # --- Tier 2: move Staff Input to attachment, keep strategy inline ---
+        if staff_input_section:
+            adf_size = len(json.dumps(updated_adf))
+            print(f"  Jira rejected description (CONTENT_LIMIT_EXCEEDED, "
+                  f"{adf_size:,} chars ADF). Moving Staff Input to attachment.",
+                  file=sys.stderr)
+            _upload_staff_input_attachment(
+                server, user, token, args.issue_key,
+                staff_input_section, attachments)
+            staff_input_attached = True
+            tier2_md = _replace_staff_input_with_notice(
+                updated_md, args.issue_key)
+            tier2_adf = markdown_to_adf(tier2_md)
+            try:
+                update_description(
+                    server, user, token, args.issue_key, tier2_adf)
+            except urllib.error.HTTPError as e2:
+                if e2.code != 400:
+                    raise
+                error_body2 = getattr(e2, "error_body", "") or \
+                    e2.read().decode("utf-8", errors="replace")
+                if "CONTENT_LIMIT_EXCEEDED" not in error_body2:
+                    raise
+                # --- Tier 3: also move strategy to attachment ---
+                print("  Still too large. Moving strategy to attachment.",
+                      file=sys.stderr)
+                _push_via_attachment(
+                    server, user, token, args.issue_key,
+                    updated_md, strategy_section, attachments,
+                    staff_input_already_attached=True)
+                return
+        else:
+            # No staff input to offload — go straight to tier 3
+            adf_size = len(json.dumps(updated_adf))
+            print(f"  Jira rejected description (CONTENT_LIMIT_EXCEEDED, "
+                  f"{adf_size:,} chars ADF). Falling back to attachment.",
+                  file=sys.stderr)
+            _push_via_attachment(
+                server, user, token, args.issue_key,
+                updated_md, strategy_section, attachments)
+            return
+
+    # Inline push succeeded — clean up orphaned attachments from prior pushes
     old_att = _find_strategy_attachment(attachments, args.issue_key)
     if old_att:
         delete_attachment(server, user, token, old_att["id"])
         print(f"  Removed previous strategy attachment "
               f"(content now fits in description)", file=sys.stderr)
 
-    print(f"OK: Strategy and Staff Engineer / SME Input pushed to "
-          f"{args.issue_key}")
+    if not staff_input_attached:
+        _delete_staff_input_attachment(
+            server, user, token, args.issue_key, attachments)
+
+    suffix = " (Staff Input as attachment)" if staff_input_attached else ""
+    print(f"OK: Strategy pushed to {args.issue_key}{suffix}")
 
 
 if __name__ == "__main__":

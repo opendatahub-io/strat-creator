@@ -538,3 +538,72 @@ class TestPushLargeStrategy:
         md = _get_description_markdown(jira, "RHAISTRAT-1104")
         assert STAFF_INPUT_HEADING in md
         assert "Effort estimate should be L" in md
+
+    def test_staff_input_attachment_round_trip(self, jira, art_dir):
+        """When Staff Input goes to an attachment (tier 2/3), pulling back
+        should reconstruct the full Staff Input in the local file."""
+        from jira_utils import add_attachment
+
+        jira.create("RHAISTRAT-1105", "Staff input attachment RT",
+                     "## Business Need\n\nContext.",
+                     labels=["strat-creator-rubric-pass"])
+        jira.create("RHAIRFE-1105", "RFE for RT", "RFE content.")
+        jira.request("POST", "/rest/api/3/issueLink", {
+            "type": {"name": "Cloners"},
+            "inwardIssue": {"key": "RHAISTRAT-1105"},
+            "outwardIssue": {"key": "RHAIRFE-1105"},
+        })
+
+        strategy_content = (
+            f"{STRATEGY_HEADING}\n\n"
+            "### TL;DR\n\nSummary here.\n\n"
+            "### Technical Approach\n\nUse MIG profiles.\n"
+        )
+        staff_input_content = (
+            f"{STAFF_INPUT_HEADING}\n\n"
+            "Use Argo Workflows, not Tekton.\n"
+        )
+
+        # Simulate tier 2: strategy inline, staff input as attachment
+        from push_strategy import (
+            update_description, markdown_to_adf,
+            STAFF_INPUT_ATTACHMENT_NOTICE,
+            STAFF_INPUT_ATTACHMENT_TEMPLATE,
+        )
+        import tempfile
+
+        si_notice = STAFF_INPUT_ATTACHMENT_NOTICE.format(
+            filename="RHAISTRAT-1105-staff-input.md")
+        full_desc = (
+            "## Business Need\n\nContext.\n\n"
+            f"{strategy_content}\n\n"
+            f"{STAFF_INPUT_HEADING}\n\n{si_notice}"
+        )
+        update_description(jira.url, "admin", "admin", "RHAISTRAT-1105",
+                           markdown_to_adf(full_desc))
+
+        with tempfile.NamedTemporaryFile(
+                mode="w", suffix=".md", delete=False, encoding="utf-8") as f:
+            f.write(staff_input_content + "\n")
+            tmp_path = f.name
+        try:
+            add_attachment(jira.url, "admin", "admin", "RHAISTRAT-1105",
+                           tmp_path, filename="RHAISTRAT-1105-staff-input.md")
+        finally:
+            import os as _os
+            _os.unlink(tmp_path)
+
+        # Now pull
+        pull_script = os.path.join(PROJECT_ROOT, "scripts", "pull_strategy.py")
+        local_dir = art_dir / "local"
+        pull_result = subprocess.run(
+            [sys.executable, pull_script, "RHAISTRAT-1105",
+             "--local-dir", str(local_dir)],
+            env=_env(jira), capture_output=True, text=True, cwd=PROJECT_ROOT)
+        assert pull_result.returncode == 0, f"stderr: {pull_result.stderr}"
+        assert "staff input" in pull_result.stdout.lower()
+
+        pulled_path = local_dir / "strat-tasks" / "RHAISTRAT-1105.md"
+        content = pulled_path.read_text()
+        assert "Use Argo Workflows, not Tekton" in content
+        assert "Use MIG profiles" in content
