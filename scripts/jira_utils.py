@@ -29,7 +29,31 @@ except (ImportError, OSError):
 
 # ─── HTTP Layer ───────────────────────────────────────────────────────────────
 
-def make_request(url, user, token, body=None, method=None):
+_MAX_REDIRECTS = 5
+
+
+def _allowed_redirect(original_url, redirect_url):
+    """Validate that redirect_url is safe to follow with credentials.
+
+    Allows same-origin and *.atlassian.net (Jira Cloud host migration).
+    """
+    from urllib.parse import urlparse, urljoin
+    redirect_resolved = urljoin(original_url, redirect_url)
+    orig = urlparse(original_url)
+    redir = urlparse(redirect_resolved)
+    if redir.scheme != "https":
+        return False, redirect_resolved
+    orig_host = orig.netloc.lower()
+    redir_host = redir.netloc.lower()
+    if orig_host == redir_host:
+        return True, redirect_resolved
+    if redir_host.endswith(".atlassian.net"):
+        return True, redirect_resolved
+    return False, redirect_resolved
+
+
+def make_request(url, user, token, body=None, method=None,
+                 _redirect_count=0):
     """HTTP request with Basic Auth. Returns parsed JSON or None for 204."""
     credentials = base64.b64encode(f"{user}:{token}".encode()).decode()
     headers = {
@@ -53,7 +77,18 @@ def make_request(url, user, token, body=None, method=None):
         if e.code in (301, 302, 303, 307, 308):
             redirect_url = e.headers.get("Location")
             if redirect_url:
-                return make_request(redirect_url, user, token, body, method)
+                if _redirect_count >= _MAX_REDIRECTS:
+                    e.close()
+                    raise RuntimeError(
+                        f"Too many redirects (>{_MAX_REDIRECTS})")
+                same, resolved = _allowed_redirect(url, redirect_url)
+                if not same:
+                    e.close()
+                    raise RuntimeError(
+                        f"Redirect to disallowed origin: {resolved}")
+                e.close()
+                return make_request(resolved, user, token, body, method,
+                                    _redirect_count=_redirect_count + 1)
         raise
 
 
