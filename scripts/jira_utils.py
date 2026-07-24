@@ -29,6 +29,21 @@ except (ImportError, OSError):
 
 # ─── HTTP Layer ───────────────────────────────────────────────────────────────
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Disable urllib's implicit redirect following.
+
+    Forces redirects to surface as HTTPError so make_request can apply
+    _allowed_redirect validation before forwarding credentials.
+    """
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+_redirect_opener = urllib.request.build_opener(
+    _NoRedirect(),
+    urllib.request.HTTPSHandler(context=ssl_ctx),
+)
+
 _MAX_REDIRECTS = 5
 
 
@@ -66,7 +81,7 @@ def make_request(url, user, token, body=None, method=None,
         data = json.dumps(body).encode()
     req = urllib.request.Request(url, data=data, headers=headers, method=method)
     try:
-        with urllib.request.urlopen(req, timeout=60, context=ssl_ctx) as resp:
+        with _redirect_opener.open(req, timeout=60) as resp:
             if resp.status == 204:
                 return None
             resp_body = resp.read()
