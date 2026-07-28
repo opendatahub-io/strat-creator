@@ -87,7 +87,7 @@ def main():
 
     source = get_issue(server, user, token, args.source_key,
                        fields=["summary", "description", "priority", "labels",
-                               "components", "fixVersions", "versions",
+                               "components", "versions",
                                "customfield_10855", "parent"])
     fields = source.get("fields", {})
 
@@ -100,8 +100,6 @@ def main():
               if l != "strat-creator-processing"]
     components = [c["name"] for c in fields.get("components", [])
                   if isinstance(c, dict) and "name" in c]
-    fix_versions = [v["name"] for v in fields.get("fixVersions", [])
-                    if isinstance(v, dict) and "name" in v]
     affects_versions = [v["name"] for v in fields.get("versions", [])
                         if isinstance(v, dict) and "name" in v]
     # Target Version (customfield_10855) is a multi-version picker. Prefer the
@@ -124,7 +122,6 @@ def main():
         priority=priority,
         labels=labels,
         components=components,
-        fix_versions=fix_versions,
         affects_versions=affects_versions,
         target_versions=target_versions,
         parent_key=parent_key,

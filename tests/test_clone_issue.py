@@ -76,7 +76,7 @@ class TestCloneIssue:
         assert "strat-creator-3.5" in clone_labels
         assert "tech-reviewed" in clone_labels
 
-    def test_components_fix_versions_affects_versions_are_copied(self, jira):
+    def test_components_and_affects_versions_are_copied(self, jira):
         jira.create("RHAIRFE-1002", "Pipeline orchestration",
                      "Orchestrate ML pipelines.",
                      components=["Dashboard", "Model Registry"],
@@ -93,8 +93,7 @@ class TestCloneIssue:
         comp_names = sorted(c["name"] for c in clone_fields.get("components", []))
         assert comp_names == ["Dashboard", "Model Registry"]
 
-        fix_names = sorted(v["name"] for v in clone_fields.get("fixVersions", []))
-        assert fix_names == ["2.12", "2.13"]
+        assert clone_fields.get("fixVersions", []) == []
 
         aff_names = [v["name"] for v in clone_fields.get("versions", [])]
         assert aff_names == ["2.10"]
