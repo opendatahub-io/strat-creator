@@ -691,7 +691,7 @@ def _delta_html(current, prev, field, is_pct=True):
 
 
 def generate_dashboard(runs, exec_summary, output_path, jira_counts=None,
-                       processing_issues=None):
+                       processing_issues=None, sme_audit=None):
     """Generate the full dashboard HTML."""
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
     current = runs[-1] if runs else None
@@ -701,6 +701,7 @@ def generate_dashboard(runs, exec_summary, output_path, jira_counts=None,
     runs_json = json.dumps(runs, indent=None)
     jira_counts_json = json.dumps(jira_counts) if jira_counts else "null"
     processing_json = json.dumps(processing_issues) if processing_issues else "[]"
+    sme_audit_json = json.dumps(sme_audit) if sme_audit else "null"
 
     # Delta arrows
     if current and current.get("delta_approval") is not None:
@@ -863,10 +864,36 @@ tr.clickable {{ cursor: pointer; }}
 .label-legend table {{ margin-bottom: 0; }}
 .label-legend td, .label-legend th {{ font-size: 12px; padding: 6px 12px; }}
 
+/* SME Audit */
+.sme-stats {{ display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }}
+.sme-stat {{ background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 20px 24px; text-align: center; }}
+.sme-stat-value {{ font-size: 36px; font-weight: 700; line-height: 1.1; }}
+.sme-stat-label {{ font-size: 12px; color: #8b949e; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 6px; }}
+.sme-stat-sub {{ font-size: 12px; color: #6e7681; margin-top: 4px; }}
+.sme-charts {{ display: grid; grid-template-columns: 280px 1fr; gap: 24px; margin-bottom: 24px; }}
+.sme-chart-card {{ background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 20px; }}
+.sme-chart-card h3 {{ color: #f0f6fc; font-size: 14px; margin-bottom: 16px; }}
+.sme-donut-wrap {{ display: flex; flex-direction: column; align-items: center; }}
+.sme-legend {{ display: flex; gap: 20px; margin-top: 12px; font-size: 12px; color: #8b949e; }}
+.sme-legend-dot {{ width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 4px; vertical-align: middle; }}
+.sme-filter-bar {{ display: flex; align-items: center; gap: 0; padding: 0 16px; border-bottom: 1px solid #30363d; margin-bottom: 0; }}
+.sme-filter-tabs {{ display: flex; flex: 1; gap: 0; }}
+.sme-filter-tab {{ padding: 8px 16px; font-size: 13px; font-weight: 500; color: #8b949e; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; background: none; border-top: none; border-left: none; border-right: none; font-family: inherit; }}
+.sme-filter-tab:hover {{ color: #c9d1d9; }}
+.sme-filter-tab.active {{ color: #f0f6fc; border-bottom-color: #f78166; }}
+.sme-status-select {{ font-size: 13px; color: #c9d1d9; background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 6px 10px; cursor: pointer; }}
+.sme-status-select:focus {{ outline: 2px solid #58a6ff; outline-offset: -1px; }}
+.sme-badge {{ display: inline-block; padding: 2px 10px; border-radius: 100px; font-size: 11px; font-weight: 600; }}
+.sme-badge-empty {{ background: #3d2e00; color: #d29922; }}
+.sme-badge-populated {{ background: #23302a; color: #3fb950; }}
+.sme-status-pill {{ display: inline-block; padding: 2px 10px; border-radius: 100px; font-size: 11px; font-weight: 500; background: #21262d; color: #8b949e; border: 1px solid #30363d; }}
+
 @media (max-width: 900px) {{
     .kpi-grid {{ grid-template-columns: repeat(2, 1fr); }}
     .charts-grid {{ grid-template-columns: 1fr; }}
     .two-col {{ grid-template-columns: 1fr; }}
+    .sme-stats {{ grid-template-columns: repeat(2, 1fr); }}
+    .sme-charts {{ grid-template-columns: 1fr; }}
 }}
 </style>
 </head>
@@ -897,6 +924,7 @@ tr.clickable {{ cursor: pointer; }}
     <div class="nav-tab" onclick="switchPage('blocked')">Blocked RFEs</div>
     <div class="nav-tab" onclick="switchPage('processing')">Currently Processing</div>
     <div class="nav-tab" onclick="switchPage('pipeline')">Pipeline</div>
+    <div class="nav-tab" onclick="switchPage('sme-audit')" id="tab-sme-audit" style="display:none">SME Input Audit</div>
 </div>
 <select id="time-range" onchange="applyTimeRange()" style="font-size:13px;color:#c9d1d9;background:#161b22;border:1px solid #30363d;border-radius:6px;padding:8px 12px;cursor:pointer">
     <option value="0">All time</option>
@@ -1138,6 +1166,11 @@ graph LR
 </div>
 </div><!-- end pipeline -->
 
+<!-- ═══ SME INPUT AUDIT PAGE ═══ -->
+<div class="nav-page" id="page-sme-audit">
+<div id="sme-audit-content"></div>
+</div>
+
 <div class="footer">
     strat-creator pipeline | RHAI Agentic SDLC
 </div>
@@ -1146,6 +1179,7 @@ graph LR
 const ALL_RUNS = {runs_json};
 const JIRA_COUNTS = {jira_counts_json};
 const PROCESSING_ISSUES = {processing_json};
+const SME_AUDIT = {sme_audit_json};
 let RUNS = filterByDays(ALL_RUNS, 10);
 let EXEC = recomputeExec(RUNS);
 
@@ -2389,12 +2423,168 @@ if (dContainer) {{
     document.addEventListener('mouseup', () => {{ isDragging = false; }});
 }}
 
+// ─── SME Input Audit ─────────────────────────────────────────────────────────
+function renderSmeAudit() {{
+    if (!SME_AUDIT) return;
+    document.getElementById('tab-sme-audit').style.display = '';
+    const data = SME_AUDIT;
+    const total = data.length;
+    const empty = data.filter(d => d.sme_empty);
+    const populated = data.filter(d => !d.sme_empty);
+    const emptyCount = empty.length;
+    const popCount = populated.length;
+    const pctPop = total ? Math.round(popCount / total * 1000) / 10 : 0;
+    const pctEmpty = total ? Math.round(emptyCount / total * 1000) / 10 : 0;
+
+    const statuses = {{}};
+    data.forEach(d => {{ statuses[d.status] = (statuses[d.status] || 0) + 1; }});
+    const statusOrder = Object.keys(statuses).sort((a, b) => statuses[b] - statuses[a]);
+
+    const statusByInput = {{}};
+    data.forEach(d => {{
+        if (!statusByInput[d.status]) statusByInput[d.status] = {{ total: 0, empty: 0, populated: 0 }};
+        statusByInput[d.status].total++;
+        if (d.sme_empty) statusByInput[d.status].empty++;
+        else statusByInput[d.status].populated++;
+    }});
+
+    // Donut SVG
+    const popAngle = (popCount / total) * 360;
+    function arcPath(cx, cy, r, startA, endA, ir) {{
+        const s = (startA - 90) * Math.PI / 180;
+        const e = (endA - 90) * Math.PI / 180;
+        const la = (endA - startA) > 180 ? 1 : 0;
+        return `M ${{cx + r * Math.cos(s)}} ${{cy + r * Math.sin(s)}} A ${{r}} ${{r}} 0 ${{la}} 1 ${{cx + r * Math.cos(e)}} ${{cy + r * Math.sin(e)}} L ${{cx + ir * Math.cos(e)}} ${{cy + ir * Math.sin(e)}} A ${{ir}} ${{ir}} 0 ${{la}} 0 ${{cx + ir * Math.cos(s)}} ${{cy + ir * Math.sin(s)}} Z`;
+    }}
+    const cx = 110, cy = 110, or2 = 100, ir2 = 65, gap = 1.5;
+    const popPath = arcPath(cx, cy, or2, gap, popAngle - gap, ir2);
+    const emptyPath = arcPath(cx, cy, or2, popAngle + gap, 360 - gap, ir2);
+
+    // Status bars
+    const maxSt = Math.max(...statusOrder.map(s => statusByInput[s].total));
+    const barW = 300;
+    const barH = 24;
+    let barsHtml = '';
+    statusOrder.forEach((st, i) => {{
+        const d = statusByInput[st];
+        const pw = Math.max(2, (d.populated / maxSt) * barW);
+        const ew = d.empty > 0 ? Math.max(0, (d.empty / maxSt) * barW) : 0;
+        const lx = pw + ew + (ew > 0 ? 2 : 0) + 8;
+        const y = i * (barH + 5);
+        barsHtml += `<g transform="translate(0,${{y}})"><text x="-8" y="${{barH / 2 + 4}}" text-anchor="end" fill="#8b949e" font-size="11">${{st}}</text><rect x="0" y="0" width="${{pw}}" height="${{barH}}" rx="3" fill="#3fb950"/>`;
+        if (ew > 0) barsHtml += `<rect x="${{pw + 2}}" y="0" width="${{ew}}" height="${{barH}}" rx="3" fill="#d29922"/>`;
+        barsHtml += `<text x="${{lx}}" y="${{barH / 2 + 4}}" fill="#6e7681" font-size="11">${{d.populated}}/${{d.total}}</text></g>`;
+    }});
+    const barChartH = statusOrder.length * (barH + 5);
+
+    // Status dropdown options
+    const statusOpts = statusOrder.map(s => `<option value="${{s}}">${{s}}</option>`).join('');
+
+    // Table rows
+    const sorted = [...data].sort((a, b) => {{ if (a.sme_empty !== b.sme_empty) return a.sme_empty ? 1 : -1; return a.key.localeCompare(b.key); }});
+    const rowsHtml = sorted.map(r => {{
+        const bc = r.sme_empty ? 'sme-badge-empty' : 'sme-badge-populated';
+        const bt = r.sme_empty ? 'No Input' : 'Has Input';
+        return `<tr data-sme="${{r.sme_empty ? 'empty' : 'populated'}}" data-status="${{r.status}}"><td><a href="https://redhat.atlassian.net/browse/${{r.key}}" target="_blank" style="color:#58a6ff;text-decoration:none;font-weight:500">${{r.key}}</a></td><td style="color:#8b949e;max-width:450px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${{r.summary}}</td><td><span class="sme-status-pill">${{r.status}}</span></td><td><span class="sme-badge ${{bc}}">${{bt}}</span></td></tr>`;
+    }}).join('');
+
+    const el = document.getElementById('sme-audit-content');
+    el.innerHTML = `
+    <div class="sme-stats">
+        <div class="sme-stat"><div class="sme-stat-value" style="color:#58a6ff">${{total}}</div><div class="sme-stat-label">Total Signed Off</div><div class="sme-stat-sub">strategies</div></div>
+        <div class="sme-stat"><div class="sme-stat-value" style="color:#3fb950">${{popCount}}</div><div class="sme-stat-label">With SME Input</div><div class="sme-stat-sub">${{pctPop}}% of total</div></div>
+        <div class="sme-stat"><div class="sme-stat-value" style="color:#d29922">${{emptyCount}}</div><div class="sme-stat-label">Empty SME Input</div><div class="sme-stat-sub">${{pctEmpty}}% of total</div></div>
+        <div class="sme-stat"><div class="sme-stat-value" style="color:#3fb950">${{pctPop}}%</div><div class="sme-stat-label">Correction Rate</div><div class="sme-stat-sub">strats that needed fixes</div></div>
+    </div>
+
+    <div class="sme-charts">
+        <div class="sme-chart-card">
+            <h3>SME Input Coverage</h3>
+            <div class="sme-donut-wrap">
+                <svg width="220" height="220" viewBox="0 0 220 220">
+                    <path d="${{popPath}}" fill="#3fb950"/>
+                    <path d="${{emptyPath}}" fill="#d29922"/>
+                    <text x="${{cx}}" y="${{cy - 4}}" text-anchor="middle" font-size="32" font-weight="700" fill="#f0f6fc">${{pctPop}}%</text>
+                    <text x="${{cx}}" y="${{cy + 14}}" text-anchor="middle" font-size="11" fill="#8b949e">needed corrections</text>
+                </svg>
+                <div class="sme-legend">
+                    <span><span class="sme-legend-dot" style="background:#3fb950"></span> With Input (${{popCount}})</span>
+                    <span><span class="sme-legend-dot" style="background:#d29922"></span> Empty (${{emptyCount}})</span>
+                </div>
+            </div>
+        </div>
+        <div class="sme-chart-card">
+            <h3>SME Input by Status</h3>
+            <svg width="100%" height="${{barChartH + 10}}" viewBox="-120 -4 480 ${{barChartH + 10}}">${{barsHtml}}</svg>
+            <div class="sme-legend" style="margin-top:8px">
+                <span><span class="sme-legend-dot" style="background:#3fb950"></span> With Input</span>
+                <span><span class="sme-legend-dot" style="background:#d29922"></span> Empty</span>
+            </div>
+        </div>
+    </div>
+
+    <div style="background:#161b22;border:1px solid #30363d;border-radius:10px;overflow:hidden">
+        <div style="padding:16px 20px 12px;display:flex;justify-content:space-between;align-items:baseline">
+            <h3 style="color:#f0f6fc;font-size:14px">All Strategies</h3>
+            <span id="sme-table-count" style="font-size:12px;color:#6e7681">${{total}} strategies</span>
+        </div>
+        <div class="sme-filter-bar">
+            <div class="sme-filter-tabs">
+                <button class="sme-filter-tab active" data-filter="all">All (${{total}})</button>
+                <button class="sme-filter-tab" data-filter="populated">With Input (${{popCount}})</button>
+                <button class="sme-filter-tab" data-filter="empty">Empty SME (${{emptyCount}})</button>
+            </div>
+            <select class="sme-status-select" id="sme-status-filter">
+                <option value="all">All Statuses</option>
+                ${{statusOpts}}
+            </select>
+        </div>
+        <table>
+            <thead><tr><th style="width:130px">Key</th><th>Summary</th><th style="width:130px">Status</th><th style="width:100px">SME Input</th></tr></thead>
+            <tbody id="sme-table-body">${{rowsHtml}}</tbody>
+        </table>
+    </div>
+
+    <div style="margin-top:16px;font-size:11px;color:#484f58;line-height:1.6">
+        <strong>Methodology:</strong> A strategy is flagged as "empty" if its description has no Staff Engineer / SME Input section,
+        the section is blank, or it contains only the default template text. Both header variants ("Staff Engineer / SME Input" and
+        the older "Staff Engineer Input") are recognized.
+    </div>`;
+
+    // Wire up filters
+    function applySmeFilters() {{
+        const activeTab = document.querySelector('.sme-filter-tab.active');
+        const smeF = activeTab ? activeTab.dataset.filter : 'all';
+        const statusF = document.getElementById('sme-status-filter').value;
+        const rows = document.querySelectorAll('#sme-table-body tr');
+        let shown = 0;
+        rows.forEach(row => {{
+            const sme = row.dataset.sme;
+            const st = row.dataset.status;
+            const smeOk = smeF === 'all' || (smeF === 'empty' && sme === 'empty') || (smeF === 'populated' && sme === 'populated');
+            const stOk = statusF === 'all' || st === statusF;
+            row.style.display = (smeOk && stOk) ? '' : 'none';
+            if (smeOk && stOk) shown++;
+        }});
+        document.getElementById('sme-table-count').textContent = shown + ' strategies';
+    }}
+    document.querySelectorAll('.sme-filter-tab').forEach(tab => {{
+        tab.addEventListener('click', () => {{
+            document.querySelectorAll('.sme-filter-tab').forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            applySmeFilters();
+        }});
+    }});
+    document.getElementById('sme-status-filter').addEventListener('change', applySmeFilters);
+}}
+
 // ─── Init ────────────────────────────────────────────────────────────────────
 renderExecutiveSummary();
 renderOverviewKPIs();
 renderAttention();
 renderBlocked();
 renderProcessing();
+renderSmeAudit();
 buildRunList();
 buildRunSelector();
 initCharts();
@@ -2515,6 +2705,73 @@ def _query_processing_issues():
         return None
 
 
+def _query_sme_audit():
+    """Query signed-off strategies and classify SME Input sections."""
+    try:
+        from jira_utils import require_env, search_issues, adf_to_markdown
+        server, user, token = require_env()
+        if not all([server, user, token]):
+            print("Warning: JIRA env vars not set, skipping SME audit",
+                  file=sys.stderr)
+            return None
+        jql = 'labels = "strat-creator-human-sign-off"'
+        issues = search_issues(server, user, token, jql,
+                               fields=["key", "summary", "description",
+                                        "status"],
+                               max_results=300)
+        default_core = ("Add technical corrections, architectural direction, "
+                        "component preferences, or domain expertise below")
+        headers = [
+            "Staff Engineer / SME Input",
+            "Staff Engineer/SME Input",
+            "Staff Engineer Input",
+        ]
+        results = []
+        for issue in issues:
+            key = issue["key"]
+            fields = issue["fields"]
+            summary = fields.get("summary", "")
+            status = fields.get("status", {}).get("name", "")
+            desc_adf = fields.get("description")
+            desc_md = adf_to_markdown(desc_adf) if desc_adf else ""
+            sme_empty = True
+            for splitter in headers:
+                if splitter in desc_md:
+                    parts = desc_md.split(splitter, 1)
+                    if len(parts) >= 2:
+                        after = parts[1]
+                        next_h = after.find("\n## ")
+                        sme_content = (after[:next_h].strip() if next_h > 0
+                                       else after.strip())
+                        cleaned = re.sub(r"[*_~`]", "", sme_content)
+                        cleaned = " ".join(cleaned.split())
+                        if not cleaned:
+                            sme_empty = True
+                        elif (default_core in cleaned
+                              and len(cleaned) < len(default_core) + 250):
+                            tail = cleaned
+                            for marker in [
+                                "needs-attention label from Jira.",
+                                "needs-attention label.",
+                                default_core,
+                            ]:
+                                if marker in tail:
+                                    tail = tail.split(marker)[-1].strip()
+                                    break
+                            sme_empty = len(tail) < 30
+                        else:
+                            sme_empty = False
+                    break
+            results.append({"key": key, "summary": summary,
+                            "status": status, "sme_empty": sme_empty})
+        print(f"SME audit: {len(results)} strategies, "
+              f"{sum(1 for r in results if r['sme_empty'])} empty")
+        return results
+    except Exception as e:
+        print(f"Warning: SME audit query failed: {e}", file=sys.stderr)
+        return None
+
+
 def main():
     parser = argparse.ArgumentParser(description="Generate multi-run strategy dashboard")
     parser.add_argument("--data-dir", required=True,
@@ -2540,6 +2797,7 @@ def main():
     # Query Jira for live KPIs and processing status (optional)
     jira_counts = _query_jira_kpis() if args.jira_kpis else None
     processing_issues = _query_processing_issues() if args.jira_kpis else None
+    sme_audit = _query_sme_audit() if args.jira_kpis else None
 
     # Scan all runs
     print(f"Scanning {args.data_dir} for runs...")
@@ -2555,7 +2813,7 @@ def main():
     print(f"Executive summary: {exec_summary['total']} unique strategies "
           f"({exec_summary['approved']} approved, {exec_summary['needs_attention']} need attention)")
     generate_dashboard(runs, exec_summary, args.output, jira_counts,
-                       processing_issues)
+                       processing_issues, sme_audit)
 
 
 if __name__ == "__main__":
