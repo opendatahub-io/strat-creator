@@ -197,7 +197,6 @@ if 'strat-creator-rubric-pass' in labels:
     print(f'[GUARD] {key}: strat-creator-rubric-pass present, sign-off is valid')
     sys.exit(0)
 # Preconditions met: sign-off present without rubric-pass — remove with compensation
-remove_labels(s, u, t, key, ['strat-creator-human-sign-off'])
 comment = '''*[Strat Creator]* The \`strat-creator-human-sign-off\` label was removed because it was applied without the prerequisite \`strat-creator-rubric-pass\` label.
 
 **Required workflow:**
@@ -206,20 +205,37 @@ comment = '''*[Strat Creator]* The \`strat-creator-human-sign-off\` label was re
 
 This strategy will now be processed by the pipeline. Once it earns \`strat-creator-rubric-pass\`, you can use \`/strategy-signoff\` to properly sign off.'''
 try:
+    remove_labels(s, u, t, key, ['strat-creator-human-sign-off'])
     add_comment(s, u, t, key, markdown_to_adf(comment))
 except Exception as e:
-    # Compensate: re-add label since audit comment failed — no silent removal without audit trail
-    print(f'[ERROR] Comment failed ({e}). Re-adding label to maintain consistency.')
-    add_labels(s, u, t, key, ['strat-creator-human-sign-off'])
+    # Compensate: re-add label since removal/comment may have partially committed
+    print(f'[ERROR] Recovery failed ({e}). Attempting compensation: re-adding label.')
+    try:
+        add_labels(s, u, t, key, ['strat-creator-human-sign-off'])
+        # Verify compensation by re-fetching labels
+        verify = get_issue(s, u, t, key, fields=['labels'])
+        verify_labels = [l['name'] if isinstance(l, dict) else l for l in verify.get('fields', {}).get('labels', [])]
+        if 'strat-creator-human-sign-off' not in verify_labels:
+            print(f'[FATAL] Compensation failed: strat-creator-human-sign-off not confirmed on {key} after re-add. Manual intervention required.')
+            sys.exit(1)
+        print(f'[COMPENSATED] Label re-added and verified on {key}.')
+    except Exception as e2:
+        print(f'[FATAL] Compensation also failed ({e2}). Label state for {key} is unknown. Manual intervention required.')
+        sys.exit(1)
     sys.exit(1)
+# Re-fetch labels after successful recovery for downstream gate
+import json
+final_issue = get_issue(s, u, t, key, fields=['labels'])
+final_labels = [l['name'] if isinstance(l, dict) else l for l in final_issue.get('fields', {}).get('labels', [])]
+print('FINAL_LABELS=' + json.dumps(final_labels))
 print(f'[LABEL REMOVED] strat-creator-human-sign-off removed from {key} (missing prerequisite: strat-creator-rubric-pass)')
 print(f'[COMMENT] Posted explanation to {key}')
 "
 ```
 
-The script exits with code 1 if compensation was needed (comment failed, label re-added). Check the exit code — if non-zero, print `[ERROR] Premature sign-off recovery failed for RHAISTRAT-NNNN — label was re-added, manual intervention needed` and continue processing.
+The script exits with code 1 if recovery failed -- check output for `[COMPENSATED]` (label restored and verified) or `[FATAL]` (label state unknown, requires manual intervention). If non-zero, print `[ERROR] Premature sign-off recovery failed for RHAISTRAT-NNNN -- check output for details, manual intervention may be needed` and continue processing. On success (exit 0), the output contains a `FINAL_LABELS=<json>` line with the STRAT's current labels after recovery -- use these for the gate check below instead of the earlier `find_strat_for_rfe.py` output to ensure the gate operates on current Jira state.
 
-**Pipeline label gate**: From the script output, check each remaining STRAT candidate's labels. If the STRAT has either `strat-creator-rubric-pass` or `strat-creator-needs-attention`, **skip this RFE** — the STRAT has already been processed by the pipeline:
+**Pipeline label gate**: From the `FINAL_LABELS` output (if the recovery script ran and succeeded) or the original `find_strat_for_rfe.py` output, check each remaining STRAT candidate's labels. If the STRAT has either `strat-creator-rubric-pass` or `strat-creator-needs-attention`, **skip this RFE** — the STRAT has already been processed by the pipeline:
 - Do NOT import the STRAT
 - Append to `artifacts/strat-skipped.md` with reason and run info (same format as Step 2a): `RHAISTRAT-NNNN already processed (label: <label>)`
 - Print `[SKIP] RHAIRFE-NNNN — RHAISTRAT-NNNN already has <label>`
