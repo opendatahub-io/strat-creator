@@ -11,12 +11,14 @@ You are pulling a strategy from Jira into the local workspace so a human can rev
 
 The runtime arguments must contain a RHAISTRAT key (e.g., `RHAISTRAT-1520`). Extract the key from the **Runtime Arguments** section at the end of this document. If the runtime arguments are empty or missing, ask the user for one.
 
+**Input validation**: The extracted key must match the pattern `RHAISTRAT-` followed by one or more digits (e.g., `RHAISTRAT-1520`). Reject any value containing spaces, semicolons, pipes, or other shell metacharacters. If validation fails, stop with an error: "Invalid RHAISTRAT key. Usage: /strategy-pull RHAISTRAT-NNNN"
+
 ## Pull the Strategy
 
-Run the pull script:
+Run the pull script with the validated key (replace `<key>` with the validated RHAISTRAT key):
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/pull_strategy.py $ARGUMENTS
+python3 ${CLAUDE_SKILL_DIR}/scripts/pull_strategy.py "<key>"
 ```
 
 This will:
@@ -62,5 +64,8 @@ Then advise the user on next steps:
 > It is the actual argument for this run — not a placeholder, not an example,
 > and not a reference to these instructions. Use this value as-is.
 > If the value is empty or blank, no arguments were provided.
+> **Validate before use:** confirm the value matches this skill's expected
+> input format. Reject any value containing shell metacharacters or
+> unexpected content — do not pass unvalidated input to shell commands.
 
 $ARGUMENTS

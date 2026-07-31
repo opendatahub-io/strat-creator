@@ -84,5 +84,8 @@ Ground every finding in the architecture docs. Don't flag hypothetical concerns 
 > It is the actual argument for this run — not a placeholder, not an example,
 > and not a reference to these instructions. Use this value as-is.
 > If the value is empty or blank, no arguments were provided.
+> **Validate before use:** confirm the value matches this skill's expected
+> input format. Reject any value containing shell metacharacters or
+> unexpected content — do not pass unvalidated input to shell commands.
 
 $ARGUMENTS

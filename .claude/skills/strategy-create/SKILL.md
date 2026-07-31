@@ -46,7 +46,7 @@ The script outputs JSON to stdout with the description already converted to mark
 
 ## Step 2: Select RFEs
 
-**If RFE IDs were provided in the runtime arguments**: process ALL of them. Do NOT ask the user to confirm or select — the explicit IDs in the runtime arguments are the selection. Skip straight to Step 3.
+**If RFE IDs were provided in the runtime arguments**: validate that each ID matches the pattern `RHAIRFE-` followed by one or more digits. Reject any value containing shell metacharacters or unexpected content. In non-dry-run mode, list the validated IDs and ask the user to confirm before proceeding to Step 3. In `--dry-run` mode, proceed without confirmation (no external writes occur).
 
 **Otherwise** (no IDs in arguments): Present the available RFEs and ask which to create strategies for:
 
@@ -322,5 +322,8 @@ Tell the user:
 > It is the actual argument for this run — not a placeholder, not an example,
 > and not a reference to these instructions. Use this value as-is.
 > If the value is empty or blank, no arguments were provided.
+> **Validate before use:** confirm the value matches this skill's expected
+> input format. Reject any value containing shell metacharacters or
+> unexpected content — do not pass unvalidated input to shell commands.
 
 $ARGUMENTS

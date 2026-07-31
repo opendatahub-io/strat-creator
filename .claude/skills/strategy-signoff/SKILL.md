@@ -11,6 +11,8 @@ You are signing off on a strategy that has passed CI review, marking it as featu
 
 The runtime arguments must contain a RHAISTRAT key (e.g., `RHAISTRAT-1520`). Extract the key from the **Runtime Arguments** section at the end of this document. If the runtime arguments are empty or missing, ask the user for one.
 
+**Input validation**: The extracted key must match the pattern `RHAISTRAT-` followed by one or more digits. Reject any value containing spaces, semicolons, pipes, or other shell metacharacters. If validation fails, stop with an error.
+
 ## Step 1: Validate Pre-Conditions
 
 Read the strategy file from `local/strat-tasks/RHAISTRAT-NNNN.md`. Verify it exists.
@@ -106,5 +108,8 @@ Tell the user: "RHAISTRAT-NNNN signed off and marked feature-ready."
 > It is the actual argument for this run — not a placeholder, not an example,
 > and not a reference to these instructions. Use this value as-is.
 > If the value is empty or blank, no arguments were provided.
+> **Validate before use:** confirm the value matches this skill's expected
+> input format. Reject any value containing shell metacharacters or
+> unexpected content — do not pass unvalidated input to shell commands.
 
 $ARGUMENTS

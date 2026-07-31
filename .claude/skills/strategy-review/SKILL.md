@@ -35,6 +35,8 @@ If both `local/strat-tasks/` and `artifacts/strat-tasks/` have files, prefer `lo
 
 This skill processes exactly **one strategy per invocation**. The runtime arguments must contain a strategy key (e.g., `RHAISTRAT-1531` or `STRAT-001`). Extract the key from the **Runtime Arguments** section at the end of this document. If the runtime arguments are empty or missing, **stop with an error**: "No strategy key provided. Usage: /strategy-review RHAISTRAT-NNNN"
 
+**Input validation**: The extracted key must match `RHAISTRAT-` or `STRAT-` followed by one or more digits. Optional flags (`--dry-run`, `--architecture-context <path>`) must be parsed separately. Reject any value that does not match expected patterns.
+
 Read the strategy file in `artifacts/strat-tasks/`. If it doesn't exist or hasn't been refined yet (no "Strategy" section), tell the user to run `/strategy-refine` first and stop.
 
 Check if a prior review exists in `artifacts/strat-reviews/`. If one exists for this strategy, read it — this is a re-review after revisions.
@@ -53,10 +55,10 @@ If the STRAT has either `strat-creator-rubric-pass` or `strat-creator-needs-atte
 
 ## Step 2: Fetch Architecture Context
 
-If `--architecture-context <path>` appears in the runtime arguments, use the local path:
+If `--architecture-context <path>` appears in the runtime arguments, validate the path before use: it must not contain shell metacharacters (`;`, `|`, `&`, backticks, `$(`, `>`, `<`) and must be an existing local directory. Then pass it quoted:
 
 ```bash
-bash ${CLAUDE_SKILL_DIR}/scripts/fetch-architecture-context.sh <path>
+bash ${CLAUDE_SKILL_DIR}/scripts/fetch-architecture-context.sh "<path>"
 ```
 
 Otherwise, fetch from remote:
@@ -295,5 +297,8 @@ Based on the result:
 > It is the actual argument for this run — not a placeholder, not an example,
 > and not a reference to these instructions. Use this value as-is.
 > If the value is empty or blank, no arguments were provided.
+> **Validate before use:** confirm the value matches this skill's expected
+> input format. Reject any value containing shell metacharacters or
+> unexpected content — do not pass unvalidated input to shell commands.
 
 $ARGUMENTS

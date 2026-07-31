@@ -169,6 +169,7 @@ RUNTIME_ARGS_HEADER = "## Runtime Arguments"
 RUNTIME_ARGS_MARKER = (
     "The value below was substituted by the skill runner at invocation time."
 )
+RUNTIME_ARGS_VALIDATE_MARKER = "Validate before use:"
 
 
 def _skills_using_arguments():
@@ -176,6 +177,22 @@ def _skills_using_arguments():
     return [(name, path, content) for name, path, content
             in _discover_skills()
             if "$ARGUMENTS" in content]
+
+
+def _extract_runtime_args_section(content):
+    """Extract the body of the ## Runtime Arguments section."""
+    lines = content.split("\n")
+    section_lines = []
+    in_section = False
+    for line in lines:
+        if line.strip() == RUNTIME_ARGS_HEADER:
+            in_section = True
+            continue
+        if in_section and line.startswith("## "):
+            break
+        if in_section:
+            section_lines.append(line)
+    return "\n".join(section_lines)
 
 
 ALL_SKILLS_WITH_ARGUMENTS = _skills_using_arguments()
@@ -199,12 +216,37 @@ class TestArgumentsFraming:
     @pytest.mark.parametrize("skill_name,skill_path,content",
                              ALL_SKILLS_WITH_ARGUMENTS,
                              ids=[s[0] for s in ALL_SKILLS_WITH_ARGUMENTS])
-    def test_has_substitution_marker(self, skill_name, skill_path, content):
-        assert RUNTIME_ARGS_MARKER in content, (
-            f"Skill '{skill_name}' uses $ARGUMENTS but is missing the "
-            f"substitution marker text. The Runtime Arguments section must "
-            f"state that the value was substituted by the skill runner — "
-            f"see RHAIFIRST-399.")
+    def test_has_substitution_marker_in_section(self, skill_name, skill_path,
+                                                content):
+        section = _extract_runtime_args_section(content)
+        assert RUNTIME_ARGS_MARKER in section, (
+            f"Skill '{skill_name}' uses $ARGUMENTS but the "
+            f"'{RUNTIME_ARGS_HEADER}' section is missing the substitution "
+            f"marker text. The marker must appear inside the Runtime "
+            f"Arguments section — see RHAIFIRST-399.")
+
+    @pytest.mark.parametrize("skill_name,skill_path,content",
+                             ALL_SKILLS_WITH_ARGUMENTS,
+                             ids=[s[0] for s in ALL_SKILLS_WITH_ARGUMENTS])
+    def test_has_arguments_token_in_section(self, skill_name, skill_path,
+                                            content):
+        section = _extract_runtime_args_section(content)
+        assert "$ARGUMENTS" in section, (
+            f"Skill '{skill_name}' uses $ARGUMENTS but the token does not "
+            f"appear inside the '{RUNTIME_ARGS_HEADER}' section. "
+            f"The $ARGUMENTS substitution must be within the Runtime "
+            f"Arguments section — see RHAIFIRST-399.")
+
+    @pytest.mark.parametrize("skill_name,skill_path,content",
+                             ALL_SKILLS_WITH_ARGUMENTS,
+                             ids=[s[0] for s in ALL_SKILLS_WITH_ARGUMENTS])
+    def test_has_validation_instruction(self, skill_name, skill_path, content):
+        section = _extract_runtime_args_section(content)
+        assert RUNTIME_ARGS_VALIDATE_MARKER in section, (
+            f"Skill '{skill_name}' is missing the validation instruction "
+            f"in the '{RUNTIME_ARGS_HEADER}' section. Add a "
+            f"'{RUNTIME_ARGS_VALIDATE_MARKER}' instruction to prevent "
+            f"unvalidated input from reaching shell commands.")
 
     @pytest.mark.parametrize("skill_name,skill_path,content",
                              ALL_SKILLS_WITH_ARGUMENTS,
@@ -224,7 +266,6 @@ class TestArgumentsFraming:
             if line.strip() == RUNTIME_ARGS_HEADER:
                 in_runtime_section = True
                 continue
-            # A new H2 section ends the Runtime Arguments section
             if in_runtime_section and line.startswith("## "):
                 in_runtime_section = False
             if in_code_block or in_runtime_section:
