@@ -244,17 +244,17 @@ status:
 STRAT_PATH="<workflow-dir>/strat-tasks/<filename>.md"
 
 # only when this pass rewrote body content
-current_refine_count=$(python3 ${CLAUDE_SKILL_DIR}/scripts/frontmatter.py read \
+current_refine_count=$(python3 scripts/frontmatter.py read \
     "$STRAT_PATH" \
   | python3 -c 'import sys,json; v=json.load(sys.stdin).get("refine_count"); print(v if isinstance(v,int) and not isinstance(v,bool) and v>=0 else 0)') \
   || current_refine_count=""
 if [[ "$current_refine_count" =~ ^[0-9]+$ ]]; then
-    python3 ${CLAUDE_SKILL_DIR}/scripts/frontmatter.py set "$STRAT_PATH" \
+    python3 scripts/frontmatter.py set "$STRAT_PATH" \
         status=Refined \
         "refine_count=$((current_refine_count + 1))"
 else
     # read/parse failed - never reset a valid counter; record status only
-    python3 ${CLAUDE_SKILL_DIR}/scripts/frontmatter.py set "$STRAT_PATH" \
+    python3 scripts/frontmatter.py set "$STRAT_PATH" \
         status=Refined
 fi
 ```

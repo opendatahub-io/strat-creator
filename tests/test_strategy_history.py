@@ -19,6 +19,7 @@ from strategy_history import (
     STRATEGY_HEADING,
     PRE_REFINE_STAGING,
     _validate_path_id,
+    _assert_within_base,
 )
 from artifact_utils import read_frontmatter
 
@@ -609,3 +610,109 @@ class TestPathValidation:
     def test_rejects_slash(self):
         with pytest.raises(ValueError):
             _validate_path_id("foo/bar")
+
+    def test_rejects_integer(self):
+        with pytest.raises(ValueError):
+            _validate_path_id(42)
+
+    def test_rejects_list(self):
+        with pytest.raises(ValueError):
+            _validate_path_id(["RHAISTRAT-100"])
+
+    def test_rejects_trailing_newline(self):
+        with pytest.raises(ValueError):
+            _validate_path_id("RHAISTRAT-100\n")
+
+    def test_rejects_bool(self):
+        with pytest.raises(ValueError):
+            _validate_path_id(True)
+
+
+class TestSymlinkProtection:
+
+    def test_symlink_in_history_dir_rejected(self, tmp_path):
+        """_assert_within_base rejects a symlink that escapes the base."""
+        base = tmp_path / "strat-history"
+        base.mkdir()
+        target = tmp_path / "outside"
+        target.mkdir()
+        link = base / "evil-link"
+        link.symlink_to(target)
+
+        with pytest.raises(ValueError, match="symlink"):
+            _assert_within_base(str(link), str(base), "history_dir")
+
+    def test_non_symlink_within_base_accepted(self, tmp_path):
+        """_assert_within_base accepts a normal directory within the base."""
+        base = tmp_path / "strat-history"
+        base.mkdir()
+        child = base / "RHAISTRAT-100"
+        child.mkdir()
+        # Should not raise
+        _assert_within_base(str(child), str(base), "history_dir")
+
+    def test_path_escaping_base_rejected(self, tmp_path):
+        """_assert_within_base rejects a path that resolves outside the base."""
+        base = tmp_path / "strat-history"
+        base.mkdir()
+        escaped = str(tmp_path / "strat-history" / ".." / "etc" / "passwd")
+        with pytest.raises(ValueError, match="escapes base"):
+            _assert_within_base(escaped, str(base), "history_dir")
+
+    def test_snapshot_rejects_symlink_history_dir(self, tmp_path):
+        """snapshot() rejects if the strat-history/<id> path is a symlink."""
+        strat_dir = tmp_path / "local" / "strat-tasks"
+        strat_dir.mkdir(parents=True)
+        strat_path = str(strat_dir / "RHAISTRAT-100.md")
+        _make_strategy_file(strat_path, SAMPLE_STRATEGY_V1)
+
+        history_base = tmp_path / "local" / "strat-history"
+        history_base.mkdir(parents=True)
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        (history_base / "RHAISTRAT-100").symlink_to(outside)
+
+        with pytest.raises(ValueError, match="symlink"):
+            snapshot(strat_path)
+
+
+class TestArchiveCollision:
+
+    def test_reset_handles_existing_archive_dir(self, tmp_path):
+        """reset() appends a suffix when the archive name already exists."""
+        strat_dir = tmp_path / "local" / "strat-tasks"
+        strat_dir.mkdir(parents=True)
+        strat_path = str(strat_dir / "RHAISTRAT-100.md")
+        _make_strategy_file(strat_path, SAMPLE_STRATEGY_V1)
+
+        save(strat_path)  # v0
+        snapshot(strat_path)
+        _make_strategy_file(strat_path, SAMPLE_STRATEGY_V2)
+        save(strat_path)  # v1
+
+        history_dir = tmp_path / "local" / "strat-history" / "RHAISTRAT-100"
+
+        # Pre-create an archive dir to simulate collision
+        from unittest.mock import patch
+        from datetime import datetime, timezone
+
+        fixed_ts = "20260731-120000"
+        collision_dir = tmp_path / "local" / "strat-history" / f"RHAISTRAT-100-{fixed_ts}"
+        collision_dir.mkdir(parents=True)
+
+        with patch("strategy_history.datetime") as mock_dt:
+            mock_dt.now.return_value = datetime(2026, 7, 31, 12, 0, 0, tzinfo=timezone.utc)
+            mock_dt.side_effect = lambda *a, **k: datetime(*a, **k)
+            result = reset(strat_path)
+
+        assert result == 0
+        assert not history_dir.exists()
+
+        # The collision dir still exists (it was pre-existing)
+        assert collision_dir.exists()
+
+        # The actual archive should have a -1 suffix
+        suffixed_dir = tmp_path / "local" / "strat-history" / f"RHAISTRAT-100-{fixed_ts}-1"
+        assert suffixed_dir.exists()
+        assert (suffixed_dir / "v0.md").exists()
+        assert (suffixed_dir / "v1.md").exists()

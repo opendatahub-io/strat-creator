@@ -284,10 +284,40 @@ SAFE_ID_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._-]*$')
 
 def _validate_path_id(value, label="identifier"):
     """Reject absolute paths and traversal components in path identifiers."""
-    if not value or os.path.isabs(value) or '..' in value.split(os.sep):
+    if not isinstance(value, str) or not value:
         raise ValueError(f"Invalid {label}: {value!r}")
-    if not SAFE_ID_RE.match(value):
+    if os.path.isabs(value) or '..' in value.split(os.sep):
         raise ValueError(f"Invalid {label}: {value!r}")
+    if not SAFE_ID_RE.fullmatch(value):
+        raise ValueError(f"Invalid {label}: {value!r}")
+
+
+def _assert_within_base(path, base, label="path"):
+    """Ensure *path* resolves (symlinks included) to somewhere inside *base*.
+
+    Raises ``ValueError`` if the canonical path escapes the base directory or
+    if any component of *path* is a symlink.
+    """
+    real = os.path.realpath(path)
+    real_base = os.path.realpath(base)
+    # os.path.commonpath raises ValueError when paths are on different drives
+    # on Windows; on POSIX that cannot happen, but the startswith check is
+    # the important one.
+    if not (real == real_base or real.startswith(real_base + os.sep)):
+        raise ValueError(
+            f"{label} escapes base directory: {path!r} resolves to {real!r}"
+        )
+    # Reject if any existing component is itself a symlink.
+    current = path
+    while True:
+        if os.path.islink(current):
+            raise ValueError(
+                f"{label} contains a symlink component: {current!r}"
+            )
+        parent = os.path.dirname(current)
+        if parent == current:
+            break
+        current = parent
 
 
 def _resolve_history_dir(strategy_path):
@@ -300,8 +330,14 @@ def _resolve_history_dir(strategy_path):
     _validate_path_id(strat_id, "strat_id")
 
     base_dir = os.path.dirname(strategy_path)
-    history_dir = os.path.join(base_dir, "..", "strat-history", strat_id)
+    history_base = os.path.normpath(os.path.join(base_dir, "..", "strat-history"))
+    history_dir = os.path.join(history_base, strat_id)
     history_dir = os.path.normpath(history_dir)
+
+    # Guard against symlink-based escapes: the resolved history_dir must
+    # remain inside the strat-history base directory.
+    _assert_within_base(history_dir, history_base, "history_dir")
+
     return history_dir, strat_id
 
 
@@ -321,6 +357,11 @@ def reset(strategy_path):
     if has_versions:
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
         archive_dir = f"{history_dir}-{timestamp}"
+        # Avoid collision if archive_dir already exists (same-second reset).
+        suffix = 1
+        while os.path.exists(archive_dir):
+            archive_dir = f"{history_dir}-{timestamp}-{suffix}"
+            suffix += 1
         shutil.move(history_dir, archive_dir)
         print(f"Archived {strat_id} history to {archive_dir}", file=sys.stderr)
     elif os.path.isfile(staging_path):
