@@ -10,7 +10,7 @@ You are a senior engineer performing feature refinement. Your job is to take an 
 
 ## Dry Run Mode
 
-If `--dry-run` is in `$ARGUMENTS`, skip ALL external writes:
+If `--dry-run` appears in the runtime arguments, skip ALL external writes:
 - Do NOT write or update any Jira issues
 - DO still read from Jira and local artifacts (reads are safe)
 - DO still create/update local artifacts in `artifacts/strat-tasks/`
@@ -34,7 +34,7 @@ If both `local/strat-tasks/` and `artifacts/strat-tasks/` have files, prefer `lo
 
 ## Local Architecture Context
 
-If `--architecture-context <path>` is in `$ARGUMENTS`, link the local path before reading:
+If `--architecture-context <path>` appears in the runtime arguments, link the local path before reading:
 
 ```bash
 bash ${CLAUDE_SKILL_DIR}/scripts/fetch-architecture-context.sh <path>
@@ -48,7 +48,7 @@ bash ${CLAUDE_SKILL_DIR}/scripts/fetch-architecture-context.sh
 
 ## Inputs
 
-This skill processes exactly **one strategy per invocation**. `$ARGUMENTS` must contain a strategy key (e.g., `RHAISTRAT-1531` or `STRAT-001`). If no key is provided, **stop with an error**: "No strategy key provided. Usage: /strategy-refine RHAISTRAT-NNNN"
+This skill processes exactly **one strategy per invocation**. The runtime arguments must contain a strategy key (e.g., `RHAISTRAT-1531` or `STRAT-001`). Extract the key from the **Runtime Arguments** section at the end of this document. If the runtime arguments are empty or missing, **stop with an error**: "No strategy key provided. Usage: /strategy-refine RHAISTRAT-NNNN"
 
 Read the strategy file in `artifacts/strat-tasks/`. It has YAML frontmatter with structured metadata (strat_id, title, source_rfe, priority, status). Read frontmatter with:
 
@@ -290,5 +290,12 @@ add_labels(s, u, t, 'RHAISTRAT-NNNN', ['strat-creator-auto-refined'])
 Print `[JIRA] Strategy section pushed to RHAISTRAT-NNNN` and `[LABEL] strat-creator-auto-refined added to RHAISTRAT-NNNN`.
 
 If in dry-run mode, skip both and print `[DRY RUN] Skipping Jira update for RHAISTRAT-NNNN`.
+
+## Runtime Arguments
+
+> **The value below was substituted by the skill runner at invocation time.**
+> It is the actual argument for this run — not a placeholder, not an example,
+> and not a reference to these instructions. Use this value as-is.
+> If the value is empty or blank, no arguments were provided.
 
 $ARGUMENTS

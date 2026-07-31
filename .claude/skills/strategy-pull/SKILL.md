@@ -9,7 +9,7 @@ You are pulling a strategy from Jira into the local workspace so a human can rev
 
 ## Input
 
-`$ARGUMENTS` must contain a RHAISTRAT key (e.g., `RHAISTRAT-1520`). If no key is provided, ask the user for one.
+The runtime arguments must contain a RHAISTRAT key (e.g., `RHAISTRAT-1520`). Extract the key from the **Runtime Arguments** section at the end of this document. If the runtime arguments are empty or missing, ask the user for one.
 
 ## Pull the Strategy
 
@@ -55,5 +55,12 @@ Then advise the user on next steps:
 
 - **If rubric-pass**: "The strategy passed CI review. Run `/strategy-refine` and `/strategy-review` to iterate locally, then `/strategy-signoff` when you're satisfied."
 - **If needs-attention**: "The strategy was flagged by CI. Run `/strategy-refine` and `/strategy-review` to fix issues locally, then `/strategy-push` to resubmit to CI."
+
+## Runtime Arguments
+
+> **The value below was substituted by the skill runner at invocation time.**
+> It is the actual argument for this run — not a placeholder, not an example,
+> and not a reference to these instructions. Use this value as-is.
+> If the value is empty or blank, no arguments were provided.
 
 $ARGUMENTS

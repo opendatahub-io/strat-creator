@@ -9,7 +9,7 @@ You are signing off on a strategy that has passed CI review, marking it as featu
 
 ## Input
 
-`$ARGUMENTS` must contain a RHAISTRAT key (e.g., `RHAISTRAT-1520`). If no key is provided, ask the user for one.
+The runtime arguments must contain a RHAISTRAT key (e.g., `RHAISTRAT-1520`). Extract the key from the **Runtime Arguments** section at the end of this document. If the runtime arguments are empty or missing, ask the user for one.
 
 ## Step 1: Validate Pre-Conditions
 
@@ -99,5 +99,12 @@ Print `[LABEL] strat-creator-human-sign-off added to RHAISTRAT-NNNN`.
 ## Step 7: Confirm Completion
 
 Tell the user: "RHAISTRAT-NNNN signed off and marked feature-ready."
+
+## Runtime Arguments
+
+> **The value below was substituted by the skill runner at invocation time.**
+> It is the actual argument for this run — not a placeholder, not an example,
+> and not a reference to these instructions. Use this value as-is.
+> If the value is empty or blank, no arguments were provided.
 
 $ARGUMENTS

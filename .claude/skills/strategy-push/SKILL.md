@@ -9,7 +9,7 @@ You are pushing an improved strategy back to Jira so CI can re-evaluate it. This
 
 ## Input
 
-`$ARGUMENTS` must contain a RHAISTRAT key (e.g., `RHAISTRAT-1520`). If no key is provided, ask the user for one.
+The runtime arguments must contain a RHAISTRAT key (e.g., `RHAISTRAT-1520`). Extract the key from the **Runtime Arguments** section at the end of this document. If the runtime arguments are empty or missing, ask the user for one.
 
 ## Step 1: Validate Pre-Conditions
 
@@ -74,5 +74,12 @@ Tell the user:
 - "Once CI approves (adds `strat-creator-rubric-pass`), use `/strategy-pull RHAISTRAT-NNNN` again and `/strategy-signoff RHAISTRAT-NNNN` to complete the review."
 
 If the strategy previously had `strat-creator-rubric-pass`, also note: "This strategy was previously CI-approved. Your edits have been pushed and CI will re-evaluate on the next run."
+
+## Runtime Arguments
+
+> **The value below was substituted by the skill runner at invocation time.**
+> It is the actual argument for this run — not a placeholder, not an example,
+> and not a reference to these instructions. Use this value as-is.
+> If the value is empty or blank, no arguments were provided.
 
 $ARGUMENTS

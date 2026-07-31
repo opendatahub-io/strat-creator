@@ -9,7 +9,7 @@ You are a strategy creation assistant. Your job is to create strategies from app
 
 ## Dry Run Mode
 
-If `--dry-run` is in `$ARGUMENTS`, skip ALL external writes:
+If `--dry-run` appears in the runtime arguments, skip ALL external writes:
 - Do NOT clone issues in Jira (skip Step 3 entirely)
 - Do NOT create or edit any Jira issues
 - DO still fetch RFE data from Jira (reads are safe)
@@ -46,7 +46,7 @@ The script outputs JSON to stdout with the description already converted to mark
 
 ## Step 2: Select RFEs
 
-**If RFE IDs were provided in `$ARGUMENTS`**: process ALL of them. Do NOT ask the user to confirm or select — the explicit IDs in the prompt are the selection. Skip straight to Step 3.
+**If RFE IDs were provided in the runtime arguments**: process ALL of them. Do NOT ask the user to confirm or select — the explicit IDs in the runtime arguments are the selection. Skip straight to Step 3.
 
 **Otherwise** (no IDs in arguments): Present the available RFEs and ask which to create strategies for:
 
@@ -74,7 +74,7 @@ To check Target Version, fetch the `customfield_10855` field from Jira. It is an
 
 If an RFE fails the label gate, **skip it** — do not create a strategy stub. Instead, append it to `artifacts/strat-skipped.md`.
 
-Determine the **run identifier**: use the config filename from `$ARGUMENTS` (e.g., `road-to-production`) + current UTC timestamp in ISO format. Example: `road-to-production @ 2026-04-21T14:30Z`. If no config filename is available, use `manual`.
+Determine the **run identifier**: use the config filename from the runtime arguments (e.g., `road-to-production`) + current UTC timestamp in ISO format. Example: `road-to-production @ 2026-04-21T14:30Z`. If no config filename is available, use `manual`.
 
 If `artifacts/strat-skipped.md` does not exist, create it with the header. If it already exists, **append new rows** — do not overwrite. This preserves skip history across runs.
 
@@ -315,5 +315,12 @@ Tell the user:
 - Strategy stubs created in `artifacts/strat-tasks/`
 - Run `/strategy-refine` to add the HOW (technical approach, dependencies, components, non-functionals)
 - If Jira cloning was skipped, complete the manual cloning first using `artifacts/strat-jira-guide.md`
+
+## Runtime Arguments
+
+> **The value below was substituted by the skill runner at invocation time.**
+> It is the actual argument for this run — not a placeholder, not an example,
+> and not a reference to these instructions. Use this value as-is.
+> If the value is empty or blank, no arguments were provided.
 
 $ARGUMENTS

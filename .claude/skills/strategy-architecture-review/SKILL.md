@@ -21,7 +21,7 @@ Otherwise use CI mode:
 - Read RFE originals from `artifacts/rfe-tasks/`
 - Read prior reviews from `artifacts/strat-reviews/`
 
-If `$ARGUMENTS` contains a strategy key (e.g., `RHAISTRAT-133`), review only that strategy. Otherwise review all strategies in the directory.
+If the runtime arguments contain a strategy key (e.g., `RHAISTRAT-133`), review only that strategy. Otherwise review all strategies in the directory. Check the **Runtime Arguments** section at the end of this document for the substituted value.
 
 Cross-reference against the source RFEs. If this is a re-review (prior review files exist), read them.
 
@@ -77,3 +77,12 @@ For each strategy:
 ```
 
 Ground every finding in the architecture docs. Don't flag hypothetical concerns — cite specific components, APIs, or patterns from the docs that support your assessment.
+
+## Runtime Arguments
+
+> **The value below was substituted by the skill runner at invocation time.**
+> It is the actual argument for this run — not a placeholder, not an example,
+> and not a reference to these instructions. Use this value as-is.
+> If the value is empty or blank, no arguments were provided.
+
+$ARGUMENTS

@@ -163,6 +163,85 @@ def _all_referenced_sh_scripts():
     return sorted(scripts)
 
 
+# ─── $ARGUMENTS Framing ─────────────────────────────────────────────────────
+
+RUNTIME_ARGS_HEADER = "## Runtime Arguments"
+RUNTIME_ARGS_MARKER = (
+    "The value below was substituted by the skill runner at invocation time."
+)
+
+
+def _skills_using_arguments():
+    """Skills whose SKILL.md contains $ARGUMENTS."""
+    return [(name, path, content) for name, path, content
+            in _discover_skills()
+            if "$ARGUMENTS" in content]
+
+
+ALL_SKILLS_WITH_ARGUMENTS = _skills_using_arguments()
+
+
+class TestArgumentsFraming:
+    """Verify that $ARGUMENTS is wrapped in a clearly-labelled Runtime Arguments
+    section so the LLM agent never misinterprets the substituted value as a
+    placeholder or instruction reference (RHAIFIRST-399)."""
+
+    @pytest.mark.parametrize("skill_name,skill_path,content",
+                             ALL_SKILLS_WITH_ARGUMENTS,
+                             ids=[s[0] for s in ALL_SKILLS_WITH_ARGUMENTS])
+    def test_has_runtime_arguments_section(self, skill_name, skill_path,
+                                           content):
+        assert RUNTIME_ARGS_HEADER in content, (
+            f"Skill '{skill_name}' uses $ARGUMENTS but is missing a "
+            f"'{RUNTIME_ARGS_HEADER}' section. Wrap $ARGUMENTS in a "
+            f"Runtime Arguments section — see RHAIFIRST-399.")
+
+    @pytest.mark.parametrize("skill_name,skill_path,content",
+                             ALL_SKILLS_WITH_ARGUMENTS,
+                             ids=[s[0] for s in ALL_SKILLS_WITH_ARGUMENTS])
+    def test_has_substitution_marker(self, skill_name, skill_path, content):
+        assert RUNTIME_ARGS_MARKER in content, (
+            f"Skill '{skill_name}' uses $ARGUMENTS but is missing the "
+            f"substitution marker text. The Runtime Arguments section must "
+            f"state that the value was substituted by the skill runner — "
+            f"see RHAIFIRST-399.")
+
+    @pytest.mark.parametrize("skill_name,skill_path,content",
+                             ALL_SKILLS_WITH_ARGUMENTS,
+                             ids=[s[0] for s in ALL_SKILLS_WITH_ARGUMENTS])
+    def test_no_arguments_in_inline_prose(self, skill_name, skill_path,
+                                          content):
+        """$ARGUMENTS must not appear in inline prose — only inside the
+        Runtime Arguments section or in code blocks (```...```)."""
+        lines = content.split("\n")
+        in_code_block = False
+        in_runtime_section = False
+        violations = []
+        for i, line in enumerate(lines, 1):
+            if line.strip().startswith("```"):
+                in_code_block = not in_code_block
+                continue
+            if line.strip() == RUNTIME_ARGS_HEADER:
+                in_runtime_section = True
+                continue
+            # A new H2 section ends the Runtime Arguments section
+            if in_runtime_section and line.startswith("## "):
+                in_runtime_section = False
+            if in_code_block or in_runtime_section:
+                continue
+            if "$ARGUMENTS" in line:
+                violations.append(f"  line {i}: {line.strip()}")
+        assert not violations, (
+            f"Skill '{skill_name}' has $ARGUMENTS in inline prose "
+            f"(outside code blocks and Runtime Arguments section). "
+            f"These references get substituted and confuse the LLM. "
+            f"Use 'the runtime arguments' instead:\n"
+            + "\n".join(violations))
+
+
+# ─── Script Quality ──────────────────────────────────────────────────────────
+
+
 class TestScriptQuality:
 
     @pytest.mark.parametrize("script", _all_referenced_py_scripts())

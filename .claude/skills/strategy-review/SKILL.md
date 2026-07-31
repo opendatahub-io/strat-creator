@@ -9,7 +9,7 @@ You are a strategy review orchestrator. Your job is to score and review a single
 
 ## Dry Run Mode
 
-If `--dry-run` is in `$ARGUMENTS`, skip ALL external writes:
+If `--dry-run` appears in the runtime arguments, skip ALL external writes:
 - Do NOT write or update any Jira issues
 - Do NOT post review comments to Jira — save them to `artifacts/strat-reviews/{id}-review-comment.md` instead
 - DO still read from Jira and local artifacts (reads are safe)
@@ -33,7 +33,7 @@ If both `local/strat-tasks/` and `artifacts/strat-tasks/` have files, prefer `lo
 
 ## Step 1: Verify Artifacts Exist
 
-This skill processes exactly **one strategy per invocation**. `$ARGUMENTS` must contain a strategy key (e.g., `RHAISTRAT-1531` or `STRAT-001`). If no key is provided, **stop with an error**: "No strategy key provided. Usage: /strategy-review RHAISTRAT-NNNN"
+This skill processes exactly **one strategy per invocation**. The runtime arguments must contain a strategy key (e.g., `RHAISTRAT-1531` or `STRAT-001`). Extract the key from the **Runtime Arguments** section at the end of this document. If the runtime arguments are empty or missing, **stop with an error**: "No strategy key provided. Usage: /strategy-review RHAISTRAT-NNNN"
 
 Read the strategy file in `artifacts/strat-tasks/`. If it doesn't exist or hasn't been refined yet (no "Strategy" section), tell the user to run `/strategy-refine` first and stop.
 
@@ -53,7 +53,7 @@ If the STRAT has either `strat-creator-rubric-pass` or `strat-creator-needs-atte
 
 ## Step 2: Fetch Architecture Context
 
-If `--architecture-context <path>` is in `$ARGUMENTS`, use the local path:
+If `--architecture-context <path>` appears in the runtime arguments, use the local path:
 
 ```bash
 bash ${CLAUDE_SKILL_DIR}/scripts/fetch-architecture-context.sh <path>
@@ -288,5 +288,12 @@ Based on the result:
 - **Approved** (`needs_attention=false`): Tell the user the strategy is ready for sign-off.
 - **Needs revision** (`needs_attention=true`, verdict=REVISE): List specific issues by dimension. Tell the user to edit the strategy, remove `needs-attention`, and re-run `/strategy-review`.
 - **Fundamental problems** (`needs_attention=true`, verdict=REJECT): Recommend revisiting the RFE or re-running `/strategy-refine` with different constraints.
+
+## Runtime Arguments
+
+> **The value below was substituted by the skill runner at invocation time.**
+> It is the actual argument for this run — not a placeholder, not an example,
+> and not a reference to these instructions. Use this value as-is.
+> If the value is empty or blank, no arguments were provided.
 
 $ARGUMENTS
