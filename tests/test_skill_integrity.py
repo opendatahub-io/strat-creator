@@ -201,10 +201,16 @@ def _extract_runtime_args_section(content):
         if not in_fence:
             if line.strip() == RUNTIME_ARGS_HEADER:
                 section_count += 1
-                in_section = True
+                # Only collect content from the first occurrence;
+                # subsequent duplicates are counted but not collected.
+                if section_count == 1:
+                    in_section = True
                 continue
             if in_section and line.startswith("## "):
-                break
+                # End the collection zone but keep scanning so that
+                # duplicate sections later in the file are still counted.
+                in_section = False
+                continue
         if in_section:
             section_lines.append(line)
     assert section_count <= 1, (
@@ -295,15 +301,18 @@ class TestArgumentsFraming:
         in_fence = False
         fence_is_executable = False
         in_runtime_section = False
+        runtime_section_seen = False
         violations = []
         for i, line in enumerate(lines, 1):
             stripped = line.strip()
             if stripped.startswith("```"):
                 if not in_fence:
-                    # Opening fence — check if it is bash/sh.
+                    # Opening fence — check if it is bash/sh/shell/zsh/console.
                     in_fence = True
                     lang = stripped[3:].strip().split()[0] if stripped[3:].strip() else ""
-                    fence_is_executable = lang in ("bash", "sh")
+                    fence_is_executable = lang in (
+                        "bash", "sh", "shell", "zsh", "console",
+                    )
                 else:
                     # Closing fence.
                     in_fence = False
@@ -312,7 +321,11 @@ class TestArgumentsFraming:
             # Only recognise H2 headings when NOT inside a fence.
             if not in_fence:
                 if stripped == RUNTIME_ARGS_HEADER:
-                    in_runtime_section = True
+                    # Only open the skip zone for the first occurrence;
+                    # a duplicate later header must not suppress scanning.
+                    if not runtime_section_seen:
+                        in_runtime_section = True
+                        runtime_section_seen = True
                     continue
                 if in_runtime_section and line.startswith("## "):
                     in_runtime_section = False
@@ -331,6 +344,186 @@ class TestArgumentsFraming:
             f"These references get substituted and confuse the LLM. "
             f"Use 'the runtime arguments' instead:\n"
             + "\n".join(violations))
+
+
+# ─── Edge-case tests for fence / section detection (RHAIFIRST-399) ──────────
+
+
+class TestExtractRuntimeArgsSectionEdgeCases:
+    """Verify that _extract_runtime_args_section correctly detects
+    duplicate '## Runtime Arguments' headers separated by an
+    intervening heading."""
+
+    def test_duplicate_runtime_args_sections_detected(self):
+        """A second '## Runtime Arguments' header after an intervening
+        heading must trigger the assertion, not be silently ignored."""
+        content = (
+            "## Runtime Arguments\n"
+            "The value below was substituted by the skill runner "
+            "at invocation time.\n"
+            "$ARGUMENTS\n"
+            "## Other Section\n"
+            "Some text.\n"
+            "## Runtime Arguments\n"
+            "Duplicate body.\n"
+        )
+        with pytest.raises(AssertionError, match=r"Found 2 unfenced"):
+            _extract_runtime_args_section(content)
+
+    def test_single_runtime_args_section_passes(self):
+        """A single '## Runtime Arguments' section must not raise."""
+        content = (
+            "## Runtime Arguments\n"
+            "The value below was substituted by the skill runner "
+            "at invocation time.\n"
+            "$ARGUMENTS\n"
+            "## Other Section\n"
+            "Some text.\n"
+        )
+        section = _extract_runtime_args_section(content)
+        assert "$ARGUMENTS" in section
+
+    def test_fenced_runtime_args_header_not_counted(self):
+        """A '## Runtime Arguments' inside a fenced block must not
+        increment section_count."""
+        content = (
+            "## Runtime Arguments\n"
+            "The value below was substituted.\n"
+            "$ARGUMENTS\n"
+            "```markdown\n"
+            "## Runtime Arguments\n"
+            "```\n"
+            "## Other Section\n"
+        )
+        # Should not raise — the fenced header is not counted.
+        section = _extract_runtime_args_section(content)
+        assert "$ARGUMENTS" in section
+
+
+class TestInlineProseEdgeCases:
+    """Verify that test_no_arguments_in_inline_prose correctly handles
+    duplicate Runtime Arguments headers and shell-alias fence types."""
+
+    def _check_inline_violations(self, content):
+        """Run the same logic as test_no_arguments_in_inline_prose
+        against synthetic content and return violations list."""
+        lines = content.split("\n")
+        in_fence = False
+        fence_is_executable = False
+        in_runtime_section = False
+        runtime_section_seen = False
+        violations = []
+        for i, line in enumerate(lines, 1):
+            stripped = line.strip()
+            if stripped.startswith("```"):
+                if not in_fence:
+                    in_fence = True
+                    lang = stripped[3:].strip().split()[0] if stripped[3:].strip() else ""
+                    fence_is_executable = lang in (
+                        "bash", "sh", "shell", "zsh", "console",
+                    )
+                else:
+                    in_fence = False
+                    fence_is_executable = False
+                continue
+            if not in_fence:
+                if stripped == RUNTIME_ARGS_HEADER:
+                    if not runtime_section_seen:
+                        in_runtime_section = True
+                        runtime_section_seen = True
+                    continue
+                if in_runtime_section and line.startswith("## "):
+                    in_runtime_section = False
+            if in_runtime_section:
+                continue
+            if in_fence and not fence_is_executable:
+                continue
+            if "$ARGUMENTS" in line:
+                violations.append(f"  line {i}: {stripped}")
+        return violations
+
+    def test_duplicate_runtime_args_section_does_not_hide_violations(self):
+        """$ARGUMENTS under a duplicate '## Runtime Arguments' header
+        must be flagged, not silently skipped."""
+        content = (
+            "## Runtime Arguments\n"
+            "$ARGUMENTS\n"
+            "## Other Section\n"
+            "Safe text.\n"
+            "## Runtime Arguments\n"
+            "$ARGUMENTS\n"
+        )
+        violations = self._check_inline_violations(content)
+        assert len(violations) == 1, (
+            f"Expected 1 violation from the duplicate section, got: "
+            f"{violations}")
+
+    def test_shell_fence_is_executable(self):
+        """```shell fences must be treated as executable so raw
+        $ARGUMENTS inside them is flagged."""
+        content = (
+            "## Runtime Arguments\n"
+            "$ARGUMENTS\n"
+            "## Usage\n"
+            "```shell\n"
+            "echo $ARGUMENTS\n"
+            "```\n"
+        )
+        violations = self._check_inline_violations(content)
+        assert len(violations) == 1
+
+    def test_zsh_fence_is_executable(self):
+        """```zsh fences must be treated as executable."""
+        content = (
+            "## Runtime Arguments\n"
+            "$ARGUMENTS\n"
+            "## Usage\n"
+            "```zsh\n"
+            "echo $ARGUMENTS\n"
+            "```\n"
+        )
+        violations = self._check_inline_violations(content)
+        assert len(violations) == 1
+
+    def test_console_fence_is_executable(self):
+        """```console fences must be treated as executable."""
+        content = (
+            "## Runtime Arguments\n"
+            "$ARGUMENTS\n"
+            "## Usage\n"
+            "```console\n"
+            "$ echo $ARGUMENTS\n"
+            "```\n"
+        )
+        violations = self._check_inline_violations(content)
+        assert len(violations) == 1
+
+    def test_markdown_fence_not_executable(self):
+        """```markdown fences must NOT be treated as executable, so
+        $ARGUMENTS inside them is allowed (not flagged)."""
+        content = (
+            "## Runtime Arguments\n"
+            "$ARGUMENTS\n"
+            "## Usage\n"
+            "```markdown\n"
+            "$ARGUMENTS\n"
+            "```\n"
+        )
+        violations = self._check_inline_violations(content)
+        assert len(violations) == 0
+
+    def test_bash_fence_still_executable(self):
+        """```bash fences must remain executable (regression guard)."""
+        content = (
+            "## Runtime Arguments\n"
+            "$ARGUMENTS\n"
+            "## Usage\n"
+            "```bash\n"
+            "echo $ARGUMENTS\n"
+            "```\n"
+        )
+        violations = self._check_inline_violations(content)
+        assert len(violations) == 1
 
 
 # ─── Script Quality ──────────────────────────────────────────────────────────
