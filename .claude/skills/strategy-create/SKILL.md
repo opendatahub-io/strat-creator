@@ -176,6 +176,30 @@ From the script output, filter out any with status **Closed**, **Resolved**, **I
 
 **Multiple open STRATs**: After filtering, if **more than one** RHAISTRAT remains in early states (e.g., New, Open), **skip this RFE** — multiple open STRATs means ambiguity that requires human resolution. Append to `artifacts/strat-skipped.md` with reason: `multiple open STRATs: RHAISTRAT-NNNN, RHAISTRAT-MMMM`. Print `[SKIP] RHAIRFE-NNNN — multiple open STRATs found, requires human decision`. If exactly one remains, import it.
 
+**Premature sign-off label check**: Before checking the pipeline gate, validate that `strat-creator-human-sign-off` is not applied without the prerequisite `strat-creator-rubric-pass`. From the script output, if any STRAT candidate has `strat-creator-human-sign-off` but does NOT have `strat-creator-rubric-pass`:
+- Remove the premature `strat-creator-human-sign-off` label
+- Post a comment to the STRAT explaining the label was removed and why
+- Continue processing this STRAT (do NOT skip it)
+
+```bash
+python3 -c "
+import sys; sys.path.insert(0, 'scripts')
+from jira_utils import remove_labels, add_comment, markdown_to_adf, require_env
+s, u, t = require_env()
+remove_labels(s, u, t, 'RHAISTRAT-NNNN', ['strat-creator-human-sign-off'])
+comment = '''*[Strat Creator]* The \`strat-creator-human-sign-off\` label was removed because it was applied without the prerequisite \`strat-creator-rubric-pass\` label.
+
+**Required workflow:**
+1. Strategy must first pass CI review (earn \`strat-creator-rubric-pass\`)
+2. Then a staff engineer can apply \`strat-creator-human-sign-off\` to mark it feature-ready
+
+This strategy will now be processed by the pipeline. Once it earns \`strat-creator-rubric-pass\`, you can use \`/strategy-signoff\` to properly sign off.'''
+add_comment(s, u, t, 'RHAISTRAT-NNNN', markdown_to_adf(comment))
+"
+```
+
+Print `[LABEL REMOVED] strat-creator-human-sign-off removed from RHAISTRAT-NNNN (missing prerequisite: strat-creator-rubric-pass)` and `[COMMENT] Posted explanation to RHAISTRAT-NNNN`.
+
 **Pipeline label gate**: From the script output, check each remaining STRAT candidate's labels. If the STRAT has either `strat-creator-rubric-pass` or `strat-creator-needs-attention`, **skip this RFE** — the STRAT has already been processed by the pipeline:
 - Do NOT import the STRAT
 - Append to `artifacts/strat-skipped.md` with reason and run info (same format as Step 2a): `RHAISTRAT-NNNN already processed (label: <label>)`

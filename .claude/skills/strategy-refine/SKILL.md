@@ -60,11 +60,37 @@ Each file also contains the business need from the source RFE. This business nee
 
 ## Pipeline Label Gate
 
+**Skip this entire section in local mode** — local mode is for human iteration after CI has already processed the strategy. Check if the strategy file exists in `local/strat-tasks/` or if its frontmatter contains `workflow: local`. If either is true, skip to the next section.
+
 Read the strategy's frontmatter to get the `jira_key`. If `jira_key` is not null, fetch the STRAT's labels from Jira:
 
 ```bash
 python3 ${CLAUDE_SKILL_DIR}/scripts/fetch_issue.py RHAISTRAT-NNNN --fields labels --markdown
 ```
+
+**Premature sign-off label check**: Validate that `strat-creator-human-sign-off` is not applied without the prerequisite `strat-creator-rubric-pass`. If the STRAT has `strat-creator-human-sign-off` but does NOT have `strat-creator-rubric-pass`:
+- Remove the premature `strat-creator-human-sign-off` label
+- Post a comment to the STRAT explaining the label was removed and why
+- Continue processing this STRAT (do NOT skip it)
+
+```bash
+python3 -c "
+import sys; sys.path.insert(0, 'scripts')
+from jira_utils import remove_labels, add_comment, markdown_to_adf, require_env
+s, u, t = require_env()
+remove_labels(s, u, t, 'RHAISTRAT-NNNN', ['strat-creator-human-sign-off'])
+comment = '''*[Strat Creator]* The \`strat-creator-human-sign-off\` label was removed because it was applied without the prerequisite \`strat-creator-rubric-pass\` label.
+
+**Required workflow:**
+1. Strategy must first pass CI review (earn \`strat-creator-rubric-pass\`)
+2. Then a staff engineer can apply \`strat-creator-human-sign-off\` to mark it feature-ready
+
+This strategy will now be processed by the pipeline. Once it earns \`strat-creator-rubric-pass\`, you can use \`/strategy-signoff\` to properly sign off.'''
+add_comment(s, u, t, 'RHAISTRAT-NNNN', markdown_to_adf(comment))
+"
+```
+
+Print `[LABEL REMOVED] strat-creator-human-sign-off removed from RHAISTRAT-NNNN (missing prerequisite: strat-creator-rubric-pass)` and `[COMMENT] Posted explanation to RHAISTRAT-NNNN`.
 
 If the STRAT has either `strat-creator-rubric-pass` or `strat-creator-needs-attention` in its labels, **stop** — it has already been processed by the pipeline:
 - Do NOT refine it
