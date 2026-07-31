@@ -17,6 +17,8 @@ from strategy_history import (
     snapshot,
     save,
     STRATEGY_HEADING,
+    PRE_REFINE_STAGING,
+    _validate_path_id,
 )
 from artifact_utils import read_frontmatter
 
@@ -540,3 +542,70 @@ class TestDeduplication:
         history_dir = tmp_path / "local" / "strat-history" / "RHAISTRAT-100"
         assert (history_dir / "v0.md").exists()
         assert (history_dir / "v1.md").exists()
+
+
+class TestResetStaleStagingCleanup:
+
+    def test_reset_removes_stale_staging_no_versions(self, tmp_path):
+        """reset() removes a stale PRE_REFINE_STAGING file when no versions exist."""
+        strat_dir = tmp_path / "local" / "strat-tasks"
+        strat_dir.mkdir(parents=True)
+        strat_path = str(strat_dir / "RHAISTRAT-100.md")
+        _make_strategy_file(strat_path, SAMPLE_STRATEGY_V1)
+
+        history_dir = tmp_path / "local" / "strat-history" / "RHAISTRAT-100"
+        history_dir.mkdir(parents=True)
+        staging = history_dir / PRE_REFINE_STAGING
+        staging.write_text("stale content")
+
+        result = reset(strat_path)
+        assert result == 0
+        assert not staging.exists()
+
+    def test_reset_archives_when_versions_and_staging_both_exist(self, tmp_path):
+        """reset() archives the whole directory (including staging) when versions exist."""
+        strat_dir = tmp_path / "local" / "strat-tasks"
+        strat_dir.mkdir(parents=True)
+        strat_path = str(strat_dir / "RHAISTRAT-100.md")
+        _make_strategy_file(strat_path, SAMPLE_STRATEGY_V1)
+
+        save(strat_path)  # v0
+        history_dir = tmp_path / "local" / "strat-history" / "RHAISTRAT-100"
+        staging = history_dir / PRE_REFINE_STAGING
+        staging.write_text("stale content")
+
+        result = reset(strat_path)
+        assert result == 0
+        assert not history_dir.exists()
+
+        parent = tmp_path / "local" / "strat-history"
+        archived = [d for d in parent.iterdir() if d.name.startswith("RHAISTRAT-100-")]
+        assert len(archived) == 1
+
+
+class TestPathValidation:
+
+    def test_valid_ids(self):
+        _validate_path_id("RHAISTRAT-100")
+        _validate_path_id("STRAT-001")
+        _validate_path_id("my_strat.v2")
+
+    def test_rejects_absolute_path(self):
+        with pytest.raises(ValueError):
+            _validate_path_id("/etc/passwd")
+
+    def test_rejects_traversal(self):
+        with pytest.raises(ValueError):
+            _validate_path_id("../../etc/passwd")
+
+    def test_rejects_empty(self):
+        with pytest.raises(ValueError):
+            _validate_path_id("")
+
+    def test_rejects_none(self):
+        with pytest.raises(ValueError):
+            _validate_path_id(None)
+
+    def test_rejects_slash(self):
+        with pytest.raises(ValueError):
+            _validate_path_id("foo/bar")

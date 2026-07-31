@@ -279,6 +279,16 @@ function toggleSection(header) {{
 
 PRE_REFINE_STAGING = ".pre-refine.md"
 
+SAFE_ID_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._-]*$')
+
+
+def _validate_path_id(value, label="identifier"):
+    """Reject absolute paths and traversal components in path identifiers."""
+    if not value or os.path.isabs(value) or '..' in value.split(os.sep):
+        raise ValueError(f"Invalid {label}: {value!r}")
+    if not SAFE_ID_RE.match(value):
+        raise ValueError(f"Invalid {label}: {value!r}")
+
 
 def _resolve_history_dir(strategy_path):
     """Derive the history directory and strat_id from a strategy file path."""
@@ -286,6 +296,8 @@ def _resolve_history_dir(strategy_path):
     strat_id = data.get("strat_id")
     if not strat_id:
         strat_id = os.path.splitext(os.path.basename(strategy_path))[0]
+
+    _validate_path_id(strat_id, "strat_id")
 
     base_dir = os.path.dirname(strategy_path)
     history_dir = os.path.join(base_dir, "..", "strat-history", strat_id)
@@ -300,13 +312,21 @@ def reset(strategy_path):
         return 1
 
     history_dir, strat_id = _resolve_history_dir(strategy_path)
-    if not os.path.isdir(history_dir) or find_latest_version(history_dir) < 0:
+    if not os.path.isdir(history_dir):
         return 0
 
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
-    archive_dir = f"{history_dir}-{timestamp}"
-    shutil.move(history_dir, archive_dir)
-    print(f"Archived {strat_id} history to {archive_dir}", file=sys.stderr)
+    staging_path = os.path.join(history_dir, PRE_REFINE_STAGING)
+    has_versions = find_latest_version(history_dir) >= 0
+
+    if has_versions:
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+        archive_dir = f"{history_dir}-{timestamp}"
+        shutil.move(history_dir, archive_dir)
+        print(f"Archived {strat_id} history to {archive_dir}", file=sys.stderr)
+    elif os.path.isfile(staging_path):
+        os.remove(staging_path)
+        print(f"Removed stale pre-refine staging for {strat_id}", file=sys.stderr)
+
     return 0
 
 
