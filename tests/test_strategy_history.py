@@ -639,7 +639,7 @@ class TestSymlinkProtection:
         link = base / "evil-link"
         link.symlink_to(target)
 
-        with pytest.raises(ValueError, match="symlink"):
+        with pytest.raises(ValueError, match="escapes base|symlink"):
             _assert_within_base(str(link), str(base), "history_dir")
 
     def test_non_symlink_within_base_accepted(self, tmp_path):
@@ -672,7 +672,7 @@ class TestSymlinkProtection:
         outside.mkdir()
         (history_base / "RHAISTRAT-100").symlink_to(outside)
 
-        with pytest.raises(ValueError, match="symlink"):
+        with pytest.raises(ValueError, match="escapes base|symlink"):
             snapshot(strat_path)
 
 
