@@ -180,18 +180,36 @@ def _skills_using_arguments():
 
 
 def _extract_runtime_args_section(content):
-    """Extract the body of the ## Runtime Arguments section."""
+    """Extract the body of the ## Runtime Arguments section.
+
+    Tracks fenced code block state so that a ``## Runtime Arguments``
+    heading inside a fenced block is not falsely recognised as the real
+    section start.  Requires exactly one unfenced section.
+    """
     lines = content.split("\n")
     section_lines = []
     in_section = False
+    in_fence = False
+    section_count = 0
     for line in lines:
-        if line.strip() == RUNTIME_ARGS_HEADER:
-            in_section = True
+        if line.strip().startswith("```"):
+            in_fence = not in_fence
+            if in_section:
+                section_lines.append(line)
             continue
-        if in_section and line.startswith("## "):
-            break
+        # Only recognise headings when NOT inside a fenced block.
+        if not in_fence:
+            if line.strip() == RUNTIME_ARGS_HEADER:
+                section_count += 1
+                in_section = True
+                continue
+            if in_section and line.startswith("## "):
+                break
         if in_section:
             section_lines.append(line)
+    assert section_count <= 1, (
+        f"Found {section_count} unfenced '{RUNTIME_ARGS_HEADER}' sections; "
+        f"expected at most 1")
     return "\n".join(section_lines)
 
 
@@ -231,11 +249,15 @@ class TestArgumentsFraming:
     def test_has_arguments_token_in_section(self, skill_name, skill_path,
                                             content):
         section = _extract_runtime_args_section(content)
-        assert "$ARGUMENTS" in section, (
+        # Require $ARGUMENTS on its own line (with optional surrounding
+        # whitespace) so that substring occurrences in prose (e.g.
+        # "The value is called $ARGUMENTS") are not falsely matched.
+        assert re.search(r"(?m)^\s*\$ARGUMENTS\s*$", section), (
             f"Skill '{skill_name}' uses $ARGUMENTS but the token does not "
-            f"appear inside the '{RUNTIME_ARGS_HEADER}' section. "
-            f"The $ARGUMENTS substitution must be within the Runtime "
-            f"Arguments section — see RHAIFIRST-399.")
+            f"appear on a standalone line inside the "
+            f"'{RUNTIME_ARGS_HEADER}' section. "
+            f"The $ARGUMENTS substitution must be on its own line within "
+            f"the Runtime Arguments section — see RHAIFIRST-399.")
 
     @pytest.mark.parametrize("skill_name,skill_path,content",
                              ALL_SKILLS_WITH_ARGUMENTS,
@@ -247,6 +269,16 @@ class TestArgumentsFraming:
             f"in the '{RUNTIME_ARGS_HEADER}' section. Add a "
             f"'{RUNTIME_ARGS_VALIDATE_MARKER}' instruction to prevent "
             f"unvalidated input from reaching shell commands.")
+        # Assert the actual security-critical language is present, not
+        # just the marker.  Skills must spell out the rejection rule.
+        assert "shell metacharacters" in section, (
+            f"Skill '{skill_name}' validation block in "
+            f"'{RUNTIME_ARGS_HEADER}' must mention 'shell metacharacters' "
+            f"so the LLM knows what to reject.")
+        assert "do not pass unvalidated input to shell commands" in section, (
+            f"Skill '{skill_name}' validation block in "
+            f"'{RUNTIME_ARGS_HEADER}' must contain 'do not pass unvalidated "
+            f"input to shell commands'.")
 
     @pytest.mark.parametrize("skill_name,skill_path,content",
                              ALL_SKILLS_WITH_ARGUMENTS,
@@ -254,27 +286,48 @@ class TestArgumentsFraming:
     def test_no_arguments_in_inline_prose(self, skill_name, skill_path,
                                           content):
         """$ARGUMENTS must not appear in inline prose — only inside the
-        Runtime Arguments section or in code blocks (```...```)."""
+        Runtime Arguments section or in non-executable code blocks.
+
+        Executable (bash/sh) fenced blocks are still inspected because
+        raw $ARGUMENTS in a shell snippet is a security concern.
+        """
         lines = content.split("\n")
-        in_code_block = False
+        in_fence = False
+        fence_is_executable = False
         in_runtime_section = False
         violations = []
         for i, line in enumerate(lines, 1):
-            if line.strip().startswith("```"):
-                in_code_block = not in_code_block
+            stripped = line.strip()
+            if stripped.startswith("```"):
+                if not in_fence:
+                    # Opening fence — check if it is bash/sh.
+                    in_fence = True
+                    lang = stripped[3:].strip().split()[0] if stripped[3:].strip() else ""
+                    fence_is_executable = lang in ("bash", "sh")
+                else:
+                    # Closing fence.
+                    in_fence = False
+                    fence_is_executable = False
                 continue
-            if line.strip() == RUNTIME_ARGS_HEADER:
-                in_runtime_section = True
+            # Only recognise H2 headings when NOT inside a fence.
+            if not in_fence:
+                if stripped == RUNTIME_ARGS_HEADER:
+                    in_runtime_section = True
+                    continue
+                if in_runtime_section and line.startswith("## "):
+                    in_runtime_section = False
+            # Skip lines inside the Runtime Arguments section.
+            if in_runtime_section:
                 continue
-            if in_runtime_section and line.startswith("## "):
-                in_runtime_section = False
-            if in_code_block or in_runtime_section:
+            # Skip non-executable fenced blocks (e.g. markdown examples).
+            if in_fence and not fence_is_executable:
                 continue
             if "$ARGUMENTS" in line:
-                violations.append(f"  line {i}: {line.strip()}")
+                violations.append(f"  line {i}: {stripped}")
         assert not violations, (
             f"Skill '{skill_name}' has $ARGUMENTS in inline prose "
-            f"(outside code blocks and Runtime Arguments section). "
+            f"(outside non-executable code blocks and Runtime Arguments "
+            f"section). "
             f"These references get substituted and confuse the LLM. "
             f"Use 'the runtime arguments' instead:\n"
             + "\n".join(violations))
