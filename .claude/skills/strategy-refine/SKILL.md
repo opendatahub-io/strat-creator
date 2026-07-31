@@ -208,11 +208,13 @@ On initial refinement, generate the full `## Strategy` section content. On revis
 
 ### Snapshot Pre-Refine State (local mode only)
 
-In local mode (`workflow: local`), **before writing the strategy**, snapshot the current file so the diff captures what this refine run changed:
+In local mode (`workflow: local`), **before writing the strategy**, snapshot the current file so the diff captures exactly what this refine run changed (rather than the cumulative diff since pull):
 
 ```bash
 python3 scripts/strategy_history.py snapshot local/strat-tasks/<filename>.md
 ```
+
+**Note:** Version history saving is automated — the `frontmatter.py set status=Refined` call below triggers `strategy_history.py save` automatically. The snapshot step above is optional but recommended for more precise per-run diffs. If you skip it, the diff will be computed against the previous saved version instead.
 
 ### Write Strategy
 
@@ -260,13 +262,9 @@ overcount).
 
 ### Save Version History (local mode only)
 
-In local mode (`workflow: local`), **after writing the strategy**, save the post-refine version and generate a diff:
+**This step is now automated.** When `frontmatter.py set status=Refined` is called on a `workflow: local` file (in the Write Strategy step above), it automatically calls `strategy_history.py save` to create the next version snapshot and generate a diff. No explicit call is needed.
 
-```bash
-python3 scripts/strategy_history.py save local/strat-tasks/<filename>.md
-```
-
-This saves the current file as the next version (v1, v2, ...) in `local/strat-history/<strat_id>/` and generates a word-level HTML diff between the pre-refine snapshot and the new version. The `latest_diff` frontmatter field is updated to point to the diff file.
+The saved version (v1, v2, ...) is stored in `local/strat-history/<strat_id>/` and a word-level HTML diff is generated between the pre-refine snapshot (if available) or the previous version and the new version. The `latest_diff` frontmatter field is updated to point to the diff file.
 
 ### Push Strategy to Jira
 

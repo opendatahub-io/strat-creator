@@ -124,6 +124,22 @@ def cmd_read(args):
     print()
 
 
+def _auto_save_history(filepath):
+    """Auto-save version history for local-mode strat-tasks after refinement.
+
+    Called after frontmatter is updated with status=Refined on a file whose
+    workflow is 'local'.  This ensures the strat-history folder and version
+    snapshots are created even when the agent skips the explicit
+    strategy_history.py save step in the skill instructions.
+    """
+    try:
+        from strategy_history import save as history_save
+        history_save(filepath)
+    except Exception as exc:
+        # History saving is best-effort — never fail the frontmatter update
+        print(f"Warning: auto-save history failed: {exc}", file=sys.stderr)
+
+
 def cmd_set(args):
     """Set/update frontmatter fields on a file."""
     schema_type = args.schema_type or _detect_schema_type(args.file)
@@ -187,6 +203,17 @@ def cmd_set(args):
             sys.exit(1)
 
     print(f"OK: {args.file}")
+
+    # Auto-save version history when setting status=Refined on a local strat-task.
+    # This is the reliable hook that ensures strat-history is always created,
+    # even if the agent skips the explicit strategy_history.py calls.
+    if (
+        schema_type == "strat-task"
+        and data.get("status") == "Refined"
+    ):
+        existing, _ = read_frontmatter(args.file)
+        if existing.get("workflow") == "local":
+            _auto_save_history(args.file)
 
 
 def cmd_batch_read(args):

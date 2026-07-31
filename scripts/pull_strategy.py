@@ -202,6 +202,22 @@ def pull_strategy(server, user, token, strat_key, local_dir="local"):
     result["files"].append(strat_path)
     print(f"  Strategy: {strat_path}")
 
+    # Auto-create v0 baseline in strat-history so subsequent refine runs
+    # always have a version to diff against.  Archive any stale history first.
+    try:
+        from strategy_history import reset as history_reset, save as history_save
+        history_reset(strat_path)
+        history_save(strat_path)
+    except Exception as exc:
+        # History saving is best-effort — never fail the pull operation
+        print(f"Warning: auto-save history failed: {exc}", file=sys.stderr)
+    history_dir = os.path.join(local_dir, "strat-history",
+                               strat_key)
+    history_dir = os.path.normpath(history_dir)
+    if os.path.isdir(history_dir):
+        result["files"].append(history_dir)
+        print(f"  Version history baseline: {history_dir}")
+
     # Fetch RFE comments
     if rfe_key:
         rfe_comments = get_comments(server, user, token, rfe_key)

@@ -11,6 +11,7 @@ test-unit:          ## Run unit tests only
 	       tests/test_apply_scores.py tests/test_markdown_adf.py tests/test_push_strategy.py \
 	       tests/test_jql_builder.py tests/test_list_rfe_ids.py \
 	       tests/test_dashboard_metrics.py \
+	       tests/test_strategy_history.py \
 	       tests/test_skill_integrity.py -v --tb=short
 
 test-integration:   ## Run integration tests (jira-emulator)

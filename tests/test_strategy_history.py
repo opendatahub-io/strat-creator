@@ -490,3 +490,53 @@ class TestIdempotency:
         html = diff_path.read_text()
         assert "<del " not in html
         assert "<ins " not in html
+
+
+class TestDeduplication:
+    """save() skips when content is unchanged and no snapshot is pending."""
+
+    def test_duplicate_save_skipped(self, tmp_path):
+        """Calling save twice without changing the file creates only one version."""
+        strat_dir = tmp_path / "local" / "strat-tasks"
+        strat_dir.mkdir(parents=True)
+        strat_path = str(strat_dir / "RHAISTRAT-100.md")
+        _make_strategy_file(strat_path, SAMPLE_STRATEGY_V1)
+
+        save(strat_path)  # → v0
+        save(strat_path)  # duplicate → should be skipped
+
+        history_dir = tmp_path / "local" / "strat-history" / "RHAISTRAT-100"
+        assert (history_dir / "v0.md").exists()
+        assert not (history_dir / "v1.md").exists()
+
+    def test_save_after_change_not_skipped(self, tmp_path):
+        """Save proceeds when content differs from latest version."""
+        strat_dir = tmp_path / "local" / "strat-tasks"
+        strat_dir.mkdir(parents=True)
+        strat_path = str(strat_dir / "RHAISTRAT-100.md")
+
+        _make_strategy_file(strat_path, SAMPLE_STRATEGY_V1)
+        save(strat_path)  # → v0
+
+        _make_strategy_file(strat_path, SAMPLE_STRATEGY_V2)
+        save(strat_path)  # → v1 (content changed)
+
+        history_dir = tmp_path / "local" / "strat-history" / "RHAISTRAT-100"
+        assert (history_dir / "v0.md").exists()
+        assert (history_dir / "v1.md").exists()
+        assert (history_dir / "v0-to-v1.html").exists()
+
+    def test_save_with_snapshot_not_deduplicated(self, tmp_path):
+        """When a snapshot exists, save always proceeds (even if content is same)."""
+        strat_dir = tmp_path / "local" / "strat-tasks"
+        strat_dir.mkdir(parents=True)
+        strat_path = str(strat_dir / "RHAISTRAT-100.md")
+        _make_strategy_file(strat_path, SAMPLE_STRATEGY_V1)
+
+        save(strat_path)  # → v0
+        snapshot(strat_path)
+        save(strat_path)  # → v1 (snapshot pending, so not deduplicated)
+
+        history_dir = tmp_path / "local" / "strat-history" / "RHAISTRAT-100"
+        assert (history_dir / "v0.md").exists()
+        assert (history_dir / "v1.md").exists()

@@ -340,6 +340,19 @@ def save(strategy_path):
     with open(strategy_path, encoding="utf-8") as f:
         content = f.read()
 
+    # Deduplicate: skip if content is identical to the latest saved version.
+    # This prevents duplicate saves when both the automated hook and explicit
+    # skill instructions call save() on the same file in the same refine run.
+    staging_path = os.path.join(history_dir, PRE_REFINE_STAGING)
+    if current_version >= 0 and not os.path.isfile(staging_path):
+        latest_path = os.path.join(history_dir, f"v{current_version}.md")
+        with open(latest_path, encoding="utf-8") as f:
+            latest_content = f.read()
+        if latest_content == content:
+            print(f"Skipped {strat_id} save (content unchanged from v{current_version})",
+                  file=sys.stderr)
+            return 0
+
     new_path = os.path.join(history_dir, f"v{new_version}.md")
     with open(new_path, "w", encoding="utf-8") as f:
         f.write(content)
@@ -347,7 +360,6 @@ def save(strategy_path):
     new_label = f"v{new_version}"
     print(f"Saved {strat_id} {new_label} to {new_path}", file=sys.stderr)
 
-    staging_path = os.path.join(history_dir, PRE_REFINE_STAGING)
     old_content = None
     old_label = None
 
