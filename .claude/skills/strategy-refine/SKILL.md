@@ -76,9 +76,20 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/fetch_issue.py RHAISTRAT-NNNN --fields label
 ```bash
 python3 -c "
 import sys; sys.path.insert(0, 'scripts')
-from jira_utils import remove_labels, add_comment, markdown_to_adf, require_env
+from jira_utils import get_issue, remove_labels, add_labels, add_comment, markdown_to_adf, require_env
 s, u, t = require_env()
-remove_labels(s, u, t, 'RHAISTRAT-NNNN', ['strat-creator-human-sign-off'])
+key = 'RHAISTRAT-NNNN'
+# Deterministic guard: re-fetch current labels and verify preconditions before mutating
+issue = get_issue(s, u, t, key, fields=['labels'])
+labels = [l['name'] if isinstance(l, dict) else l for l in issue.get('fields', {}).get('labels', [])]
+if 'strat-creator-human-sign-off' not in labels:
+    print(f'[GUARD] {key}: strat-creator-human-sign-off not present, skipping removal')
+    sys.exit(0)
+if 'strat-creator-rubric-pass' in labels:
+    print(f'[GUARD] {key}: strat-creator-rubric-pass present, sign-off is valid')
+    sys.exit(0)
+# Preconditions met: sign-off present without rubric-pass — remove with compensation
+remove_labels(s, u, t, key, ['strat-creator-human-sign-off'])
 comment = '''*[Strat Creator]* The \`strat-creator-human-sign-off\` label was removed because it was applied without the prerequisite \`strat-creator-rubric-pass\` label.
 
 **Required workflow:**
@@ -86,11 +97,19 @@ comment = '''*[Strat Creator]* The \`strat-creator-human-sign-off\` label was re
 2. Then a staff engineer can apply \`strat-creator-human-sign-off\` to mark it feature-ready
 
 This strategy will now be processed by the pipeline. Once it earns \`strat-creator-rubric-pass\`, you can use \`/strategy-signoff\` to properly sign off.'''
-add_comment(s, u, t, 'RHAISTRAT-NNNN', markdown_to_adf(comment))
+try:
+    add_comment(s, u, t, key, markdown_to_adf(comment))
+except Exception as e:
+    # Compensate: re-add label since audit comment failed — no silent removal without audit trail
+    print(f'[ERROR] Comment failed ({e}). Re-adding label to maintain consistency.')
+    add_labels(s, u, t, key, ['strat-creator-human-sign-off'])
+    sys.exit(1)
+print(f'[LABEL REMOVED] strat-creator-human-sign-off removed from {key} (missing prerequisite: strat-creator-rubric-pass)')
+print(f'[COMMENT] Posted explanation to {key}')
 "
 ```
 
-Print `[LABEL REMOVED] strat-creator-human-sign-off removed from RHAISTRAT-NNNN (missing prerequisite: strat-creator-rubric-pass)` and `[COMMENT] Posted explanation to RHAISTRAT-NNNN`.
+The script exits with code 1 if compensation was needed (comment failed, label re-added). Check the exit code — if non-zero, print `[ERROR] Premature sign-off recovery failed for RHAISTRAT-NNNN — label was re-added, manual intervention needed` and continue processing.
 
 If the STRAT has either `strat-creator-rubric-pass` or `strat-creator-needs-attention` in its labels, **stop** — it has already been processed by the pipeline:
 - Do NOT refine it
