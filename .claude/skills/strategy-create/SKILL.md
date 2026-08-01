@@ -184,7 +184,7 @@ From the script output, filter out any with status **Closed**, **Resolved**, **I
 ```bash
 python3 -c "
 import sys, json
-sys.path.insert(0, 'scripts')
+sys.path.insert(0, '${CLAUDE_SKILL_DIR}/scripts')
 from jira_utils import (get_issue, remove_labels, add_labels, add_comment,
                          get_comments, adf_to_markdown, markdown_to_adf,
                          require_jira_write_auth)
@@ -365,7 +365,7 @@ If not in dry-run mode and a RHAISTRAT was created or imported (i.e., `jira_key`
 
 ```bash
 python3 -c "
-import sys; sys.path.insert(0, 'scripts')
+import sys; sys.path.insert(0, '${CLAUDE_SKILL_DIR}/scripts')
 from jira_utils import add_labels, require_env
 s, u, t = require_env()
 add_labels(s, u, t, 'RHAISTRAT-NNNN', ['strat-creator-auto-created'])

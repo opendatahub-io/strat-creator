@@ -76,7 +76,7 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/fetch_issue.py RHAISTRAT-NNNN --fields label
 ```bash
 python3 -c "
 import sys, json
-sys.path.insert(0, 'scripts')
+sys.path.insert(0, '${CLAUDE_SKILL_DIR}/scripts')
 from jira_utils import (get_issue, remove_labels, add_labels, add_comment,
                          get_comments, adf_to_markdown, markdown_to_adf,
                          require_jira_write_auth)
@@ -359,7 +359,7 @@ Then add the provenance label:
 
 ```bash
 python3 -c "
-import sys; sys.path.insert(0, 'scripts')
+import sys; sys.path.insert(0, '${CLAUDE_SKILL_DIR}/scripts')
 from jira_utils import add_labels, require_env
 s, u, t = require_env()
 add_labels(s, u, t, 'RHAISTRAT-NNNN', ['strat-creator-auto-refined'])

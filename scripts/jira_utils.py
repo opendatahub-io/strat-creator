@@ -165,11 +165,11 @@ def require_jira_write_auth():
     """
     server, user, token = require_env()
     missing = []
-    if not server:
+    if not server or not server.strip():
         missing.append("JIRA_SERVER")
-    if not user:
+    if not user or not user.strip():
         missing.append("JIRA_USER")
-    if not token:
+    if not token or not token.strip():
         missing.append("JIRA_TOKEN")
     if missing:
         print(f"[AUTH] Jira write blocked: {', '.join(missing)} not set",

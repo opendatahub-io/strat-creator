@@ -32,6 +32,22 @@ def _skills_with_script_refs():
     return results
 
 
+def _collect_multiline_import(lines, start):
+    """Collect a parenthesized import that spans multiple lines.
+
+    Given the line index where 'from X import (' starts, joins all lines
+    through the closing ')' into a single import-names string.
+    """
+    combined = lines[start]
+    if '(' not in combined:
+        return combined
+    for k in range(start + 1, min(start + 10, len(lines))):
+        combined += " " + lines[k].strip()
+        if ')' in lines[k]:
+            break
+    return combined
+
+
 def _skills_with_inline_imports():
     """Skills using sys.path.insert(0, '${CLAUDE_SKILL_DIR}/scripts')."""
     results = []
@@ -40,10 +56,16 @@ def _skills_with_inline_imports():
         imports = []
         for i, line in enumerate(lines):
             if SYSPATH_PATTERN.search(line):
-                for j in range(i, min(i + 3, len(lines))):
+                for j in range(i, min(i + 5, len(lines))):
                     m = IMPORT_PATTERN.search(lines[j])
                     if m:
-                        imports.append((m.group(1), m.group(2).strip()))
+                        raw = m.group(2).strip()
+                        if '(' in raw and ')' not in raw:
+                            full = _collect_multiline_import(lines, j)
+                            m2 = IMPORT_PATTERN.search(full)
+                            if m2:
+                                raw = m2.group(2).strip()
+                        imports.append((m.group(1), raw))
         if imports:
             results.append((name, path, imports))
     return results
@@ -83,7 +105,9 @@ class TestInlineImports:
     def test_inline_imports_succeed(self, skill_name, skill_path, imports):
         scripts_dir = os.path.join(skill_path, "scripts")
         for module_name, import_names in imports:
-            names = [n.strip().rstrip(",") for n in import_names.split(",")]
+            cleaned = import_names.replace("(", "").replace(")", "")
+            names = [n.strip().rstrip(",") for n in cleaned.split(",")]
+            names = [n for n in names if n]
             import_stmt = ", ".join(names)
             code = (
                 f"import sys; "

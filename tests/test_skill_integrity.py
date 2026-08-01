@@ -55,7 +55,29 @@ def _extract_module_refs(content):
     return list(modules)
 
 
+CWD_SYSPATH_PATTERN = re.compile(
+    r"sys\.path\.insert\(0,\s*'scripts'\)")
+
+ALL_SKILLS = _discover_skills()
 ALL_SKILLS_WITH_SCRIPT_REFS = _skills_referencing_scripts()
+
+
+# ─── No CWD-based Imports ──────────────────────────────────────────────────
+
+
+class TestNoCwdImports:
+
+    @pytest.mark.parametrize("skill_name,skill_path,content",
+                             ALL_SKILLS,
+                             ids=[s[0] for s in ALL_SKILLS])
+    def test_no_cwd_based_sys_path_insert(self, skill_name, skill_path,
+                                           content):
+        matches = CWD_SYSPATH_PATTERN.findall(content)
+        assert not matches, (
+            f"Skill '{skill_name}' uses CWD-based "
+            f"sys.path.insert(0, 'scripts') ({len(matches)} occurrence(s)). "
+            f"Use sys.path.insert(0, '${{CLAUDE_SKILL_DIR}}/scripts') instead "
+            f"to avoid CWE-427 untrusted search path.")
 
 
 # ─── Symlink Presence ────────────────────────────────────────────────────────

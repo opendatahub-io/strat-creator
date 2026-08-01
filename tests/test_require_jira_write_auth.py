@@ -58,3 +58,27 @@ class TestRequireJiraWriteAuth:
         with pytest.raises(SystemExit) as exc_info:
             require_jira_write_auth()
         assert exc_info.value.code == 1
+
+    def test_exits_when_server_whitespace(self, monkeypatch):
+        monkeypatch.setenv("JIRA_SERVER", "   ")
+        monkeypatch.setenv("JIRA_USER", "user@example.com")
+        monkeypatch.setenv("JIRA_TOKEN", "token123")
+        with pytest.raises(SystemExit) as exc_info:
+            require_jira_write_auth()
+        assert exc_info.value.code == 1
+
+    def test_exits_when_user_whitespace(self, monkeypatch):
+        monkeypatch.setenv("JIRA_SERVER", "https://jira.example.com")
+        monkeypatch.setenv("JIRA_USER", "\t")
+        monkeypatch.setenv("JIRA_TOKEN", "token123")
+        with pytest.raises(SystemExit) as exc_info:
+            require_jira_write_auth()
+        assert exc_info.value.code == 1
+
+    def test_exits_when_token_whitespace(self, monkeypatch):
+        monkeypatch.setenv("JIRA_SERVER", "https://jira.example.com")
+        monkeypatch.setenv("JIRA_USER", "user@example.com")
+        monkeypatch.setenv("JIRA_TOKEN", " \t ")
+        with pytest.raises(SystemExit) as exc_info:
+            require_jira_write_auth()
+        assert exc_info.value.code == 1
