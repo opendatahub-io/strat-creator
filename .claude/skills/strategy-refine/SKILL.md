@@ -75,9 +75,12 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/fetch_issue.py RHAISTRAT-NNNN --fields label
 
 ```bash
 python3 -c "
-import sys; sys.path.insert(0, 'scripts')
-from jira_utils import get_issue, remove_labels, add_labels, add_comment, markdown_to_adf, require_env
-s, u, t = require_env()
+import sys, json
+sys.path.insert(0, 'scripts')
+from jira_utils import (get_issue, remove_labels, add_labels, add_comment,
+                         get_comments, adf_to_markdown, markdown_to_adf,
+                         require_jira_write_auth)
+s, u, t = require_jira_write_auth()
 key = 'RHAISTRAT-NNNN'
 # Deterministic guard: re-fetch current labels and verify preconditions before mutating
 issue = get_issue(s, u, t, key, fields=['labels'])
@@ -89,6 +92,7 @@ if 'strat-creator-rubric-pass' in labels:
     print(f'[GUARD] {key}: strat-creator-rubric-pass present, sign-off is valid')
     sys.exit(0)
 # Preconditions met: sign-off present without rubric-pass — remove with compensation
+COMMENT_MARKER = 'label was removed because it was applied without the prerequisite'
 comment = '''*[Strat Creator]* The \`strat-creator-human-sign-off\` label was removed because it was applied without the prerequisite \`strat-creator-rubric-pass\` label.
 
 **Required workflow:**
@@ -98,25 +102,39 @@ comment = '''*[Strat Creator]* The \`strat-creator-human-sign-off\` label was re
 This strategy will now be processed by the pipeline. Once it earns \`strat-creator-rubric-pass\`, you can use \`/strategy-signoff\` to properly sign off.'''
 try:
     remove_labels(s, u, t, key, ['strat-creator-human-sign-off'])
-    add_comment(s, u, t, key, markdown_to_adf(comment))
+    # Idempotent comment: check if already posted before adding
+    existing = get_comments(s, u, t, key)
+    already_posted = any(
+        COMMENT_MARKER in adf_to_markdown(c.get('body', {}))
+        for c in existing if isinstance(c.get('body'), dict)
+    )
+    if not already_posted:
+        add_comment(s, u, t, key, markdown_to_adf(comment))
+    else:
+        print(f'[GUARD] {key}: premature sign-off comment already exists, skipping duplicate')
 except Exception as e:
-    # Compensate: re-add label since removal/comment may have partially committed
-    print(f'[ERROR] Recovery failed ({e}). Attempting compensation: re-adding label.')
+    # State-aware compensation: check current Jira state before deciding
+    print(f'[ERROR] Recovery failed ({e}). Checking current state for compensation.')
     try:
-        add_labels(s, u, t, key, ['strat-creator-human-sign-off'])
-        # Verify compensation by re-fetching labels
-        verify = get_issue(s, u, t, key, fields=['labels'])
-        verify_labels = [l['name'] if isinstance(l, dict) else l for l in verify.get('fields', {}).get('labels', [])]
-        if 'strat-creator-human-sign-off' not in verify_labels:
-            print(f'[FATAL] Compensation failed: strat-creator-human-sign-off not confirmed on {key} after re-add. Manual intervention required.')
-            sys.exit(1)
-        print(f'[COMPENSATED] Label re-added and verified on {key}.')
+        current = get_issue(s, u, t, key, fields=['labels'])
+        current_labels = [l['name'] if isinstance(l, dict) else l for l in current.get('fields', {}).get('labels', [])]
+        if 'strat-creator-human-sign-off' in current_labels:
+            print(f'[RECOVERED] {key}: strat-creator-human-sign-off still present, no compensation needed.')
+        elif 'strat-creator-rubric-pass' in current_labels:
+            print(f'[RECOVERED] {key}: rubric-pass present, not re-adding premature sign-off (invariant preserved).')
+        else:
+            add_labels(s, u, t, key, ['strat-creator-human-sign-off'])
+            verify = get_issue(s, u, t, key, fields=['labels'])
+            verify_labels = [l['name'] if isinstance(l, dict) else l for l in verify.get('fields', {}).get('labels', [])]
+            if 'strat-creator-human-sign-off' not in verify_labels:
+                print(f'[FATAL] Compensation failed: strat-creator-human-sign-off not confirmed on {key} after re-add. Manual intervention required.')
+                sys.exit(1)
+            print(f'[COMPENSATED] Label re-added and verified on {key}.')
     except Exception as e2:
         print(f'[FATAL] Compensation also failed ({e2}). Label state for {key} is unknown. Manual intervention required.')
         sys.exit(1)
     sys.exit(1)
 # Re-fetch labels after successful recovery for downstream gate
-import json
 final_issue = get_issue(s, u, t, key, fields=['labels'])
 final_labels = [l['name'] if isinstance(l, dict) else l for l in final_issue.get('fields', {}).get('labels', [])]
 print('FINAL_LABELS=' + json.dumps(final_labels))
@@ -125,7 +143,7 @@ print(f'[COMMENT] Posted explanation to {key}')
 "
 ```
 
-The script exits with code 1 if recovery failed -- check output for `[COMPENSATED]` (label restored and verified) or `[FATAL]` (label state unknown, requires manual intervention). If non-zero, print `[ERROR] Premature sign-off recovery failed for RHAISTRAT-NNNN -- check output for details, manual intervention may be needed` and continue processing. On success (exit 0), the output contains a `FINAL_LABELS=<json>` line with the STRAT's current labels after recovery -- use these for the gate check below instead of the earlier `fetch_issue.py` output to ensure the gate operates on current Jira state.
+The script exits with code 1 if recovery failed -- check output for `[COMPENSATED]` (label restored and verified, safe to continue), `[RECOVERED]` (no compensation needed, original state intact), or `[FATAL]` (label state unknown, requires manual intervention). If exit code is non-zero and output contains `[FATAL]`, **stop** — do NOT proceed to refinement with unknown Jira state. Print `[ERROR] Premature sign-off recovery FATAL for RHAISTRAT-NNNN — skipping refinement to avoid processing with unknown label state`. If exit code is non-zero with `[COMPENSATED]` or `[RECOVERED]`, print `[ERROR] Premature sign-off recovery failed for RHAISTRAT-NNNN -- check output for details, manual intervention may be needed` and continue processing. On success (exit 0), the output contains a `FINAL_LABELS=<json>` line with the STRAT's current labels after recovery -- use these for the gate check below instead of the earlier `fetch_issue.py` output to ensure the gate operates on current Jira state.
 
 If the STRAT has either `strat-creator-rubric-pass` or `strat-creator-needs-attention` in its labels (using `FINAL_LABELS` if the recovery script ran, otherwise the earlier `fetch_issue.py` output), **stop** — it has already been processed by the pipeline:
 - Do NOT refine it
