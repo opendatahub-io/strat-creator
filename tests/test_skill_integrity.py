@@ -219,6 +219,63 @@ def _extract_runtime_args_section(content):
     return "\n".join(section_lines)
 
 
+def _find_inline_arguments_violations(content):
+    """Scan *content* for $ARGUMENTS references that appear outside the
+    (first) Runtime Arguments section and outside non-executable fenced
+    code blocks.
+
+    Returns a list of violation strings (``"  line N: <text>"``).
+    Executable fence languages (bash, sh, shell, zsh, console) are still
+    inspected because raw $ARGUMENTS in a shell snippet is a security
+    concern.
+
+    This is the single source of truth used by both the parametrised
+    ``test_no_arguments_in_inline_prose`` test and the edge-case helper
+    ``_check_inline_violations``.
+    """
+    lines = content.split("\n")
+    in_fence = False
+    fence_is_executable = False
+    in_runtime_section = False
+    runtime_section_seen = False
+    violations = []
+    for i, line in enumerate(lines, 1):
+        stripped = line.strip()
+        if stripped.startswith("```"):
+            if not in_fence:
+                # Opening fence — check if it is bash/sh/shell/zsh/console.
+                in_fence = True
+                lang = stripped[3:].strip().split()[0] if stripped[3:].strip() else ""
+                fence_is_executable = lang in (
+                    "bash", "sh", "shell", "zsh", "console",
+                )
+            else:
+                # Closing fence.
+                in_fence = False
+                fence_is_executable = False
+            continue
+        # Only recognise H2 headings when NOT inside a fence.
+        if not in_fence:
+            if stripped == RUNTIME_ARGS_HEADER:
+                # Only open the skip zone for the first occurrence;
+                # a duplicate later header must not suppress scanning.
+                if not runtime_section_seen:
+                    in_runtime_section = True
+                    runtime_section_seen = True
+                continue
+            if in_runtime_section and line.startswith("## "):
+                in_runtime_section = False
+        # Skip lines inside the Runtime Arguments section.
+        if in_runtime_section:
+            continue
+        # Skip non-executable fenced blocks (e.g. markdown examples).
+        if in_fence and not fence_is_executable:
+            continue
+        if "$ARGUMENTS" in line:
+            violations.append(f"  line {i}: {stripped}")
+    return violations
+
+
 ALL_SKILLS_WITH_ARGUMENTS = _skills_using_arguments()
 
 
@@ -297,46 +354,7 @@ class TestArgumentsFraming:
         Executable (bash/sh) fenced blocks are still inspected because
         raw $ARGUMENTS in a shell snippet is a security concern.
         """
-        lines = content.split("\n")
-        in_fence = False
-        fence_is_executable = False
-        in_runtime_section = False
-        runtime_section_seen = False
-        violations = []
-        for i, line in enumerate(lines, 1):
-            stripped = line.strip()
-            if stripped.startswith("```"):
-                if not in_fence:
-                    # Opening fence — check if it is bash/sh/shell/zsh/console.
-                    in_fence = True
-                    lang = stripped[3:].strip().split()[0] if stripped[3:].strip() else ""
-                    fence_is_executable = lang in (
-                        "bash", "sh", "shell", "zsh", "console",
-                    )
-                else:
-                    # Closing fence.
-                    in_fence = False
-                    fence_is_executable = False
-                continue
-            # Only recognise H2 headings when NOT inside a fence.
-            if not in_fence:
-                if stripped == RUNTIME_ARGS_HEADER:
-                    # Only open the skip zone for the first occurrence;
-                    # a duplicate later header must not suppress scanning.
-                    if not runtime_section_seen:
-                        in_runtime_section = True
-                        runtime_section_seen = True
-                    continue
-                if in_runtime_section and line.startswith("## "):
-                    in_runtime_section = False
-            # Skip lines inside the Runtime Arguments section.
-            if in_runtime_section:
-                continue
-            # Skip non-executable fenced blocks (e.g. markdown examples).
-            if in_fence and not fence_is_executable:
-                continue
-            if "$ARGUMENTS" in line:
-                violations.append(f"  line {i}: {stripped}")
+        violations = _find_inline_arguments_violations(content)
         assert not violations, (
             f"Skill '{skill_name}' has $ARGUMENTS in inline prose "
             f"(outside non-executable code blocks and Runtime Arguments "
@@ -405,42 +423,11 @@ class TestInlineProseEdgeCases:
     duplicate Runtime Arguments headers and shell-alias fence types."""
 
     def _check_inline_violations(self, content):
-        """Run the same logic as test_no_arguments_in_inline_prose
-        against synthetic content and return violations list."""
-        lines = content.split("\n")
-        in_fence = False
-        fence_is_executable = False
-        in_runtime_section = False
-        runtime_section_seen = False
-        violations = []
-        for i, line in enumerate(lines, 1):
-            stripped = line.strip()
-            if stripped.startswith("```"):
-                if not in_fence:
-                    in_fence = True
-                    lang = stripped[3:].strip().split()[0] if stripped[3:].strip() else ""
-                    fence_is_executable = lang in (
-                        "bash", "sh", "shell", "zsh", "console",
-                    )
-                else:
-                    in_fence = False
-                    fence_is_executable = False
-                continue
-            if not in_fence:
-                if stripped == RUNTIME_ARGS_HEADER:
-                    if not runtime_section_seen:
-                        in_runtime_section = True
-                        runtime_section_seen = True
-                    continue
-                if in_runtime_section and line.startswith("## "):
-                    in_runtime_section = False
-            if in_runtime_section:
-                continue
-            if in_fence and not fence_is_executable:
-                continue
-            if "$ARGUMENTS" in line:
-                violations.append(f"  line {i}: {stripped}")
-        return violations
+        """Run the inline-violation scanner against synthetic content
+        and return the violations list.  Delegates to the module-level
+        ``_find_inline_arguments_violations`` so there is a single copy
+        of the scanning logic."""
+        return _find_inline_arguments_violations(content)
 
     def test_duplicate_runtime_args_section_does_not_hide_violations(self):
         """$ARGUMENTS under a duplicate '## Runtime Arguments' header
