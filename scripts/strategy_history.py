@@ -279,6 +279,46 @@ function toggleSection(header) {{
 
 PRE_REFINE_STAGING = ".pre-refine.md"
 
+SAFE_ID_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._-]*$')
+
+
+def _validate_path_id(value, label="identifier"):
+    """Reject absolute paths and traversal components in path identifiers."""
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"Invalid {label}: {value!r}")
+    if os.path.isabs(value) or '..' in value.split(os.sep):
+        raise ValueError(f"Invalid {label}: {value!r}")
+    if not SAFE_ID_RE.fullmatch(value):
+        raise ValueError(f"Invalid {label}: {value!r}")
+
+
+def _assert_within_base(path, base, label="path"):
+    """Ensure *path* resolves (symlinks included) to somewhere inside *base*.
+
+    Raises ``ValueError`` if the canonical path escapes the base directory or
+    if any component of *path* is a symlink.
+    """
+    real = os.path.realpath(path)
+    real_base = os.path.realpath(base)
+    # os.path.commonpath raises ValueError when paths are on different drives
+    # on Windows; on POSIX that cannot happen, but the startswith check is
+    # the important one.
+    if not (real == real_base or real.startswith(real_base + os.sep)):
+        raise ValueError(
+            f"{label} escapes base directory: {path!r} resolves to {real!r}"
+        )
+    # Reject if any existing component is itself a symlink.
+    current = path
+    while True:
+        if os.path.islink(current):
+            raise ValueError(
+                f"{label} contains a symlink component: {current!r}"
+            )
+        parent = os.path.dirname(current)
+        if parent == current:
+            break
+        current = parent
+
 
 def _resolve_history_dir(strategy_path):
     """Derive the history directory and strat_id from a strategy file path."""
@@ -287,9 +327,17 @@ def _resolve_history_dir(strategy_path):
     if not strat_id:
         strat_id = os.path.splitext(os.path.basename(strategy_path))[0]
 
+    _validate_path_id(strat_id, "strat_id")
+
     base_dir = os.path.dirname(strategy_path)
-    history_dir = os.path.join(base_dir, "..", "strat-history", strat_id)
+    history_base = os.path.normpath(os.path.join(base_dir, "..", "strat-history"))
+    history_dir = os.path.join(history_base, strat_id)
     history_dir = os.path.normpath(history_dir)
+
+    # Guard against symlink-based escapes: the resolved history_dir must
+    # remain inside the strat-history base directory.
+    _assert_within_base(history_dir, history_base, "history_dir")
+
     return history_dir, strat_id
 
 
@@ -300,13 +348,26 @@ def reset(strategy_path):
         return 1
 
     history_dir, strat_id = _resolve_history_dir(strategy_path)
-    if not os.path.isdir(history_dir) or find_latest_version(history_dir) < 0:
+    if not os.path.isdir(history_dir):
         return 0
 
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
-    archive_dir = f"{history_dir}-{timestamp}"
-    shutil.move(history_dir, archive_dir)
-    print(f"Archived {strat_id} history to {archive_dir}", file=sys.stderr)
+    staging_path = os.path.join(history_dir, PRE_REFINE_STAGING)
+    has_versions = find_latest_version(history_dir) >= 0
+
+    if has_versions:
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+        archive_dir = f"{history_dir}-{timestamp}"
+        # Avoid collision if archive_dir already exists (same-second reset).
+        suffix = 1
+        while os.path.exists(archive_dir):
+            archive_dir = f"{history_dir}-{timestamp}-{suffix}"
+            suffix += 1
+        shutil.move(history_dir, archive_dir)
+        print(f"Archived {strat_id} history to {archive_dir}", file=sys.stderr)
+    elif os.path.isfile(staging_path):
+        os.remove(staging_path)
+        print(f"Removed stale pre-refine staging for {strat_id}", file=sys.stderr)
+
     return 0
 
 
@@ -340,6 +401,19 @@ def save(strategy_path):
     with open(strategy_path, encoding="utf-8") as f:
         content = f.read()
 
+    # Deduplicate: skip if content is identical to the latest saved version.
+    # This prevents duplicate saves when both the automated hook and explicit
+    # skill instructions call save() on the same file in the same refine run.
+    staging_path = os.path.join(history_dir, PRE_REFINE_STAGING)
+    if current_version >= 0 and not os.path.isfile(staging_path):
+        latest_path = os.path.join(history_dir, f"v{current_version}.md")
+        with open(latest_path, encoding="utf-8") as f:
+            latest_content = f.read()
+        if latest_content == content:
+            print(f"Skipped {strat_id} save (content unchanged from v{current_version})",
+                  file=sys.stderr)
+            return 0
+
     new_path = os.path.join(history_dir, f"v{new_version}.md")
     with open(new_path, "w", encoding="utf-8") as f:
         f.write(content)
@@ -347,7 +421,6 @@ def save(strategy_path):
     new_label = f"v{new_version}"
     print(f"Saved {strat_id} {new_label} to {new_path}", file=sys.stderr)
 
-    staging_path = os.path.join(history_dir, PRE_REFINE_STAGING)
     old_content = None
     old_label = None
 

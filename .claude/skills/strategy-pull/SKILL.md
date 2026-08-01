@@ -25,12 +25,7 @@ This will:
 3. Write `local/strat-tasks/RHAISTRAT-NNNN.md` with `workflow: local` frontmatter
 4. Fetch the linked RFE original and comments into `local/strat-originals/`
 5. Fetch the review summary comment and full review attachment into `local/strat-reviews/`
-6. Archive any existing version history and save the pulled strategy as the v0 baseline:
-
-```bash
-python3 scripts/strategy_history.py reset local/strat-tasks/RHAISTRAT-NNNN.md
-python3 scripts/strategy_history.py save local/strat-tasks/RHAISTRAT-NNNN.md
-```
+6. Automatically archive any existing version history and save the pulled strategy as the v0 baseline in `local/strat-history/RHAISTRAT-NNNN/` (no manual step needed)
 
 The pull creates three folders under `local/`:
 

@@ -156,6 +156,11 @@ class TestPullGateChecks:
         assert result.returncode == 1
         assert "RHAISTRAT-NNNN" in result.stderr
 
+    def test_rejects_traversal_key(self, jira, tmp_path):
+        local_dir = tmp_path / "local"
+        result = _run(jira, "RHAISTRAT-../../etc", local_dir)
+        assert result.returncode == 1
+
 
 class TestPullMissingCredentials:
 
