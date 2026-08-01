@@ -15,6 +15,8 @@ SYSPATH_PATTERN = re.compile(
     r"sys\.path\.insert\(0,\s*'\$\{CLAUDE_SKILL_DIR\}/scripts'\)")
 IMPORT_PATTERN = re.compile(
     r'from\s+(\w+)\s+import')
+ENV_SKILL_DIR_PATTERN = re.compile(
+    r"os\.environ\[.CLAUDE_SKILL_DIR.\]")
 
 
 def _discover_skills():
@@ -43,12 +45,12 @@ def _extract_script_refs(content):
 
 
 def _extract_module_refs(content):
-    """Extract module names from sys.path.insert + import patterns."""
+    """Extract module names from trusted CLAUDE_SKILL_DIR import patterns."""
     modules = set()
     lines = content.split("\n")
     for i, line in enumerate(lines):
-        if SYSPATH_PATTERN.search(line):
-            for j in range(i, min(i + 3, len(lines))):
+        if SYSPATH_PATTERN.search(line) or ENV_SKILL_DIR_PATTERN.search(line):
+            for j in range(i, min(i + 8, len(lines))):
                 m = IMPORT_PATTERN.search(lines[j])
                 if m:
                     modules.add(m.group(1))
@@ -56,7 +58,10 @@ def _extract_module_refs(content):
 
 
 CWD_SYSPATH_PATTERN = re.compile(
-    r"sys\.path\.insert\(0,\s*'scripts'\)")
+    r"""sys\s*\.\s*path\s*\.\s*insert\s*\(\s*0\s*,\s*
+        (['"])(?:\./)?scripts\1\s*\)""",
+    re.VERBOSE,
+)
 
 ALL_SKILLS = _discover_skills()
 ALL_SKILLS_WITH_SCRIPT_REFS = _skills_referencing_scripts()

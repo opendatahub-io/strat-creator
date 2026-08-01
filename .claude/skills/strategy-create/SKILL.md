@@ -183,8 +183,11 @@ From the script output, filter out any with status **Closed**, **Resolved**, **I
 
 ```bash
 python3 -c "
-import sys, json
-sys.path.insert(0, '${CLAUDE_SKILL_DIR}/scripts')
+import sys, os, json, pathlib
+_sd = os.environ['CLAUDE_SKILL_DIR']
+if not os.path.isabs(_sd):
+    raise SystemExit('CLAUDE_SKILL_DIR must be an absolute path')
+sys.path.insert(0, str(pathlib.Path(_sd) / 'scripts'))
 from jira_utils import (get_issue, remove_labels, add_labels, add_comment,
                          get_comments, adf_to_markdown, markdown_to_adf,
                          require_jira_write_auth)
@@ -293,7 +296,11 @@ Template sections to append (only when missing per sub-steps c and d):
 
 ```bash
 python3 -c "
-import sys; sys.path.insert(0, '${CLAUDE_SKILL_DIR}/scripts')
+import sys, os, pathlib
+_sd = os.environ['CLAUDE_SKILL_DIR']
+if not os.path.isabs(_sd):
+    raise SystemExit('CLAUDE_SKILL_DIR must be an absolute path')
+sys.path.insert(0, str(pathlib.Path(_sd) / 'scripts'))
 from jira_utils import reconstruct_business_need_file
 if reconstruct_business_need_file('artifacts/strat-tasks/RHAISTRAT-NNNN.md', 'artifacts/strat-originals/RHAIRFE-NNNN.md'):
     print('[RECONSTRUCT] Business Need restored from RHAIRFE-NNNN')
@@ -365,7 +372,11 @@ If not in dry-run mode and a RHAISTRAT was created or imported (i.e., `jira_key`
 
 ```bash
 python3 -c "
-import sys; sys.path.insert(0, '${CLAUDE_SKILL_DIR}/scripts')
+import sys, os, pathlib
+_sd = os.environ['CLAUDE_SKILL_DIR']
+if not os.path.isabs(_sd):
+    raise SystemExit('CLAUDE_SKILL_DIR must be an absolute path')
+sys.path.insert(0, str(pathlib.Path(_sd) / 'scripts'))
 from jira_utils import add_labels, require_env
 s, u, t = require_env()
 add_labels(s, u, t, 'RHAISTRAT-NNNN', ['strat-creator-auto-created'])
