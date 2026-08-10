@@ -180,3 +180,11 @@ eval/
 - **`expected_*` in `annotations.yaml` are single-sample prod references** — use them
   as calibration anchors (with `score_tolerance`), not hard gates.
 - Pin the `claude` CLI version if you need run-to-run reproducibility (prod doesn't).
+
+## Robustness coverage
+
+- **[argument-parsing-coverage.md](argument-parsing-coverage.md)** — proposed judges
+  (`refine_recognized_arg`, `strat_id_honored`) + matrix wiring to cover the flaky
+  `/strategy-refine` argument-parsing refusal (RHAIFIRST-399), and the multi-step
+  gotcha (a judge sees the *review* step, not refine's refusal — read
+  `steps/refine/stdout.log`).
