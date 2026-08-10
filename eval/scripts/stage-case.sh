@@ -58,22 +58,6 @@ if [ -d "$ROOT/.claude/agents" ]; then cp -R "$ROOT/.claude/agents" .claude/agen
 mkdir -p .claude/agents
 [ -d "$ASSETS/assess-strat/agents" ] && cp "$ASSETS/assess-strat/agents/"*.md .claude/agents/ 2>/dev/null || true
 
-# Disable Claude Code session hooks for the eval subprocess. Personal user-global
-# plugins (e.g. memsearch) register hooks that prod strat-pipeline CI never has:
-# memsearch's SessionStart/Stop hooks write .memsearch/memory/<date>.md into the
-# workspace, spawn a per-turn Haiku summarizer, and inject "Recent Memory" context
-# — all absent in prod, so they contaminate both the report and the run. A
-# workspace-local settings file turns hooks off via CC's local>user precedence;
-# it's read from the case workspace only (throwaway), never the global ~/.claude
-# config, and the harness ignores settings.local.json for its own --settings flag.
-# (Swap to {"enabledPlugins": {"memsearch@memsearch-plugins": false}} to disable
-# only memsearch instead of all hooks.)
-cat > .claude/settings.local.json <<'JSON'
-{
-  "disableAllHooks": true
-}
-JSON
-
 # architecture-context: symlink the shared read-only copy (cheap; skills read it).
 [ -d "$ARCH_CTX" ] && ln -sfn "$ARCH_CTX" .context/architecture-context || \
   log "WARN: architecture-context missing under $ASSETS (before_all should stage it)"

@@ -35,7 +35,6 @@ runner:
   # deny-by-default, trust-independent (CLI flags aren't trust-gated). Keep the
   # allow-list below COMPLETE or legitimate tool calls are silently denied.
   permission_mode: dontAsk
-
 # Trust-independent allow-list (passed via --allowed-tools, so it applies in the
 # untrusted isolated workspaces). A BARE read-only Bash command (ls/cat alone) is
 # auto-allowed by CC's built-in classifier, but a COMPOUND command defeats it: in
@@ -248,16 +247,17 @@ judges:
   #       1. With execution.steps, the case-level stdout.log (and so events.json) is
   #          the LAST step's — byte-identical to steps/review/stdout.log. So these
   #          events are review's: the scorer and prose reviewers reading the docs.
-  #       2. strategy-refine is itself a `context: fork` skill, so its tool calls run
-  #          inside a fork whose transcript is not collected. steps/refine/stdout.log
-  #          holds only init/task_started/result — zero assistant tool calls in 72/72
-  #          cases across three runs.
-  #     Net: refine's grounding is currently unobservable, and a refine-scoped check
-  #     would fail 100% of cases rather than measure anything. This gate therefore
-  #     means "the pipeline opened the docs at some point", which is weaker than it
-  #     sounds — a strategy that asserts architecture without reading anything can
-  #     still pass on the reviewers' reads. Treat it as a smoke signal, not proof of
-  #     grounding, until the fork transcript is captured (see README follow-ups).
+  #       2. strategy-refine is itself a `context: fork` skill, so its tool calls
+  #          happen in a subagent, not in steps/refine/stdout.log (which holds only
+  #          init/task_started/result). They ARE captured — the harness's
+  #          SubagentStop hook writes cases/<case>/subagents/*.jsonl — but those
+  #          transcripts are per-CASE, not per-step, so refine's reads cannot be
+  #          told apart from the scorer's and reviewers'.
+  #     Net: this gate means "the docs were opened somewhere in the case", which is
+  #     weaker than it sounds — a strategy that asserts architecture without reading
+  #     anything still passes on the reviewers' reads. Treat it as a smoke signal,
+  #     not proof of grounding. Making it refine-scoped needs per-step subagent
+  #     attribution (see README follow-ups).
   - name: architecture_context_used
     description: architecture-context was consulted somewhere in the captured trace (review step + subagents; refine's forked work is not observable).
     check: |

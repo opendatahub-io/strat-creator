@@ -51,14 +51,14 @@ This eval has two `execution.steps` (refine, review). **A judge's
 - `extract_conversation_text` emits root-level assistant text and filters
   subagents by `parent_tool_use_id`.
 
-Worse, `strategy-refine` is itself a `context: fork` skill, so its **tool calls run
-inside the fork and are not captured at all** — `steps/refine/stdout.log` holds only
-`init` / `task_started` / the final assistant turn / `result` (verified: zero
-assistant `tool_use` blocks in 72/72 cases across three runs). The refusal text IS in
-that final turn, so the judges below work; but any judge needing refine's *tool* calls
-cannot be written until the fork transcript is collected. (This is why
-`architecture_context_used` can only key off the captured trace — reviewer/scorer
-Reads — and cannot isolate refine's grounding.)
+Note also that `strategy-refine` is itself a `context: fork` skill, so its **tool
+calls are not in `steps/refine/stdout.log`** — that file holds only `init` /
+`task_started` / the final assistant turn / `result`. The refusal text IS in that
+final turn, so the judges below work as written. Refine's tool calls go to a subagent
+transcript (`cases/<case>/subagents/*.jsonl`, captured by the harness SubagentStop
+hook), but those are per-case rather than per-step, so they cannot currently be
+attributed to refine specifically. (This is why `architecture_context_used` cannot
+isolate refine's grounding.)
 
 The refine refusal is a top-level assistant turn in the **refine** step, saved at
 `<case_dir>/steps/refine/stdout.log` (`execute.py:1096-1099`), reachable via

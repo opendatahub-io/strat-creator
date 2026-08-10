@@ -32,13 +32,10 @@ rubric the pipeline itself uses (Feasibility / Testability / Scope / Architectur
   (not symlinked) `.claude/skills` + `.context` so the strat skills' bootstrap writes
   stay inside the throwaway workspace, never back into the repo.
 - **Environment parity:** the case workspace is made to look like prod CI, not like a
-  developer laptop. The `before_each` hook writes `.claude/settings.local.json` with
-  `disableAllHooks: true` so personally-installed plugins can't fire (memsearch, for
-  one, writes `.memsearch/` into the workspace, injects "Recent Memory" context, and
-  spawns a per-turn summarizer — none of which prod has), and it pre-stages the
-  `strat-scorer` agent into `.claude/agents/` because Claude Code registers agent
-  types at *startup*, so the review skill's mid-session bootstrap is too late and the
-  scorer would silently fall back to a generic agent.
+  developer laptop. The `before_each` hook pre-stages the `strat-scorer` agent into
+  `.claude/agents/`, because Claude Code registers agent types at *startup*: the
+  review skill's mid-session bootstrap is too late, and the scorer would silently
+  fall back to a generic agent.
 - **Permissions:** isolated workspaces are untrusted, so recent Claude Code drops the
   workspace `settings.json` allow-list. The runner uses `permission_mode: dontAsk`
   with a trust-independent allow-list (`permissions.allow` → `--allowed-tools`). Keep
@@ -192,12 +189,27 @@ eval/
 - **`expected_*` in `annotations.yaml` are single-sample prod references** — use them
   as calibration anchors (with `score_tolerance`), not hard gates.
 - **`architecture_context_used` cannot isolate refine.** `strategy-refine` is a
-  `context: fork` skill, so its tool calls run inside a fork that is not collected,
-  and with `execution.steps` the case-level `events.json` is the *last* step's
-  (review). The gate therefore reports whether the docs were opened anywhere in the
-  captured trace — largely the scorer/reviewers — so it is a smoke signal, not proof
-  the strategy was written from the docs. Capturing the fork transcript would make a
-  refine-scoped gate possible.
+  `context: fork` skill, so its tool calls land in a subagent transcript rather than
+  `steps/refine/stdout.log`, and with `execution.steps` the case-level `stdout.log`
+  is the *last* step's (review). Subagent transcripts are captured
+  (`cases/<case>/subagents/*.jsonl`) but are per-case, not per-step, so refine's
+  reads can't be separated from the scorer's and reviewers'. The gate is therefore a
+  smoke signal — "the docs were opened somewhere in this case" — not proof the
+  strategy was written from them. A refine-scoped gate needs per-step attribution of
+  subagent transcripts.
+- **Never set `disableAllHooks` in a case workspace.** The harness installs its
+  SubagentStop capture hook into the workspace `.claude/settings.json`, and
+  `settings.local.json` outranks it, so a blanket disable silently deletes the
+  subagent traces (it did: 153 transcripts in one run, zero in the five after).
+  Disable unwanted plugins via `enabledPlugins` instead — and put it in
+  `settings.json` (e.g. through `runner.settings`), because Claude Code drops
+  `enabledPlugins` from local scope unless the key already exists in `settings.json`
+  ([#27247](https://github.com/anthropics/claude-code/issues/27247)). Note there is
+  no wildcard for "all plugins"
+  ([#20873](https://github.com/anthropics/claude-code/issues/20873)) and an absent
+  entry means *enabled* — it falls back to the plugin's `defaultEnabled` — so every
+  id has to be listed. Disabling all of them is safe for this eval: skills, agents
+  and assess-strat are staged from the repo, so no plugin is needed inside a case.
 - **Assets are fetched from moving branches.** `stage-assets.sh` clones `assess-strat`
   and fetches `architecture-context` at HEAD, so a rubric or docs change between runs
   can move scores independently of the model under test. Pin both (and the harness,
