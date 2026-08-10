@@ -31,17 +31,14 @@ _field() { python3 -c "import sys,yaml;print((yaml.safe_load(open(sys.argv[1])) 
 STRAT_ID="$(_field strat_id)"
 RFE_KEY="$(_field rfe_key)"
 # Validate before composing paths: these come from the case input.yaml and are
-# interpolated into destination paths below, so a value containing ../ would write
-# outside the workspace.
-case "$STRAT_ID" in
-  STRAT-[0-9]*) : ;;
-  *) log "FATAL: strat_id must look like STRAT-<n>, got '$STRAT_ID'"; exit 1 ;;
-esac
-case "$RFE_KEY" in
-  RHAIRFE-[0-9]*) : ;;
-  "") log "FATAL: rfe_key missing in $INPUT"; exit 1 ;;
-  *) log "FATAL: rfe_key must look like RHAIRFE-<n>, got '$RFE_KEY'"; exit 1 ;;
-esac
+# interpolated into destination paths below, so a traversal or metacharacter would
+# escape the workspace. Anchored regex, not a `case` glob -- a glob's * matches / and
+# ; as well, so STRAT-[0-9]* happily accepts "STRAT-1/../../outside".
+[ -n "$RFE_KEY" ] || { log "FATAL: rfe_key missing in $INPUT"; exit 1; }
+[[ "$STRAT_ID" =~ ^STRAT-[0-9]+$ ]] || {
+  log "FATAL: strat_id must be STRAT-<n>, got '$STRAT_ID'"; exit 1; }
+[[ "$RFE_KEY" =~ ^RHAIRFE-[0-9]+$ ]] || {
+  log "FATAL: rfe_key must be RHAIRFE-<n>, got '$RFE_KEY'"; exit 1; }
 log "staging $STRAT_ID ($RFE_KEY) in $WS"
 
 # --- 1. Real (not symlinked) project tree so skill bootstrap can't write into the
@@ -58,11 +55,18 @@ if [ -d "$ROOT/.claude/agents" ]; then cp -R "$ROOT/.claude/agents" .claude/agen
 mkdir -p .claude/agents
 [ -d "$ASSETS/assess-strat/agents" ] && cp "$ASSETS/assess-strat/agents/"*.md .claude/agents/ 2>/dev/null || true
 
+# Both assets are required: without architecture-context refine cannot ground (and
+# the grounding gate is meaningless), without assess-strat the review has no rubric.
+# A missing one used to warn and continue, which produced scored-looking but hollow
+# results; `[ -d x ] && cmd || log` also always exits 0, so set -e never caught it.
+[ -d "$ARCH_CTX" ] || {
+  log "FATAL: architecture-context missing under $ASSETS (run eval/scripts/stage-assets.sh)"; exit 1; }
+[ -d "$ASSETS/assess-strat" ] || {
+  log "FATAL: assess-strat missing under $ASSETS (run eval/scripts/stage-assets.sh)"; exit 1; }
 # architecture-context: symlink the shared read-only copy (cheap; skills read it).
-[ -d "$ARCH_CTX" ] && ln -sfn "$ARCH_CTX" .context/architecture-context || \
-  log "WARN: architecture-context missing under $ASSETS (before_all should stage it)"
+ln -sfn "$ARCH_CTX" .context/architecture-context
 # assess-strat: real copy — the review skill's bootstrap runs offline and writes here.
-if [ -d "$ASSETS/assess-strat" ]; then cp -R "$ASSETS/assess-strat" .context/assess-strat; fi
+cp -R "$ASSETS/assess-strat" .context/assess-strat
 
 # Keep collect.py's git-diff (_modified capture) from flagging the staged project
 # tree — .context alone is 900+ arch-context/rubric files.
