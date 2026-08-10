@@ -3,9 +3,14 @@
 #   - assess-strat        : the scoring-rubric plugin (agent_prompt.md, skills, agents)
 #   - architecture-context: the RHOAI platform docs strategy-refine/review consult
 #
-# The cli-runner driver copies these into each isolated case workspace so runs are
+# The before_each hook copies these into each isolated case workspace so runs are
 # hermetic (no network at eval time). Safe to run repeatedly. Run once before the
 # first eval, or let the before_all hook stage on first use.
+#
+# Env:
+#   ARCHITECTURE_CONTEXT_PATH  optional local architecture-context checkout, passed
+#                              through to scripts/fetch-architecture-context.sh so
+#                              overlays can be tested in the eval before pushing.
 set -euo pipefail
 
 CONFIG_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"   # -> repo/eval
@@ -29,7 +34,9 @@ if [ ! -d "$ASSETS/architecture-context/architecture" ]; then
   echo "[stage] fetching architecture-context ..."
   # Fetch into the repo's .context, then relocate into .assets (fetch script is
   # hardcoded to .context/architecture-context).
-  ( cd "$REPO_ROOT" && bash scripts/fetch-architecture-context.sh )
+  # Honour a local checkout so overlay changes can be evaluated before they are
+  # pushed upstream (same contract as the fetch script's optional path argument).
+  ( cd "$REPO_ROOT" && bash scripts/fetch-architecture-context.sh ${ARCHITECTURE_CONTEXT_PATH:+"$ARCHITECTURE_CONTEXT_PATH"} )
   rm -rf "$ASSETS/architecture-context"
   cp -R "$REPO_ROOT/.context/architecture-context" "$ASSETS/architecture-context"
   rm -rf "$ASSETS/architecture-context/.git"

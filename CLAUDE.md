@@ -120,6 +120,14 @@ See the [Overlays README](https://github.com/opendatahub-io/architecture-context
 
 Files under `eval/dataset/` are built by `eval/scripts/build_dataset.py` from real RHAIRFE→RHAISTRAT triples and **must be anonymized** before they are committed or shared (they are git-ignored precisely because the raw build contains internal content). Never include real customer/partner names, individual names, email addresses, internal Slack / Google Docs / Miro / workshop links, or other personally identifiable or confidential information.
 
-Replace each with a fictional equivalent, and **web-search every replacement** to confirm it does not match a real entity — a placeholder that collides with a real company or person is not anonymized (e.g. "Meridian Bank" → "Cobalt National Bank" only after verifying the latter is fictional). Also web-search the original to confirm it is real before replacing. This applies to test inputs, annotations, and all reference files. Keep names consistent across files (same real entity → same fictional entity; derive handles/nicknames from the person's new name).
+Replace each with a fictional equivalent, and **web-search every replacement** to confirm it does not match a real entity — a placeholder that collides with a real company or person is not anonymized (e.g. "Meridian Bank" → "Cobalt National Bank" only after verifying the latter is fictional). A replacement returning no match is necessary but not sufficient, so prefer clearly invented compounds over plausible-sounding ones.
+
+Searching a *candidate* name discloses nothing, but searching an original does, so keep originals out of search engines wherever possible:
+
+- **Never search** email addresses, usernames, internal links, ticket contents, or any string combined with context (the product, "customer", the RFE text). Searching a bare public company name is acceptable; a name plus context is a disclosure.
+- **Never search a person's name to check whether they are real.** Individuals are replaced unconditionally — there is nothing to verify, so there is no reason to send the name anywhere.
+- Organisations may be checked with a **bare-name query only**, and only when it is genuinely unclear whether the name is already fictional.
+
+This applies to test inputs, annotations, and all reference files. Keep names consistent across files (same real entity → same fictional entity; derive handles/nicknames from the person's new name).
 
 **Kept as-is (not PII):** Red Hat and its products, upstream/OSS projects, public competitor products, generic role/team names (e.g. PSAP, Platform/Monitoring), RHAIRFE/RHAISTRAT ticket keys, and public GitHub/docs URLs.

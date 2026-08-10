@@ -46,6 +46,10 @@ FRONTMATTER = os.path.join(REPO_ROOT, "scripts", "frontmatter.py")
 
 PRIORITY_ENUM = {"Blocker", "Critical", "Major", "Normal", "Minor", "Undefined"}
 
+# Canonical issue-key form. Keys are interpolated into case directory names, so a
+# non-conforming value (e.g. one containing ../) is rejected before path composition.
+RFE_KEY_RE = re.compile(r"^RHAIRFE-[0-9]+$")
+
 # Curated ~24 anchors spanning the full quality range, all sizes, and the scarce
 # high-value cases (zero-dimension / reject). Scores shown are the prod reference
 # at selection time; the script resolves each RFE's LATEST complete triple, so the
@@ -101,8 +105,12 @@ def load_latest_triples(data_repo):
         run_dir = os.path.dirname(pj)
         ts = os.path.basename(run_dir)
         try:
-            d = json.load(open(pj))
-        except Exception:
+            with open(pj, encoding="utf-8") as fh:
+                d = json.load(fh)
+        except (OSError, json.JSONDecodeError) as e:
+            # Silently skipping the newest run would quietly fall back to an older
+            # one and emit stale reference scores, so make the skip visible.
+            print(f"  WARN: skipping unreadable run metadata {pj}: {e}", file=sys.stderr)
             continue
         items = d if isinstance(d, list) else (d.get("strategies") or d.get("data") or [])
         if not isinstance(items, list):
@@ -158,6 +166,13 @@ def build_case(rfe_key, tri, out_root, force):
     priority = norm_priority(e.get("priority"))
     size = e.get("size")
     strat_id = f"STRAT-{rfe_num(rfe_key)}"
+
+    # rfe_key reaches here from --keys or the data repo and is used to compose a
+    # path, so reject anything that is not the canonical form (a value containing
+    # ../ would otherwise escape out_root).
+    if not RFE_KEY_RE.match(rfe_key):
+        print(f"  SKIP {rfe_key!r} (not a canonical RHAIRFE-<n> key)", file=sys.stderr)
+        return None
 
     case_id = f"{rfe_key}-{slugify(title)}"
     case_dir = os.path.join(out_root, case_id)

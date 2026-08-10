@@ -77,6 +77,10 @@ calibration anchors, so the eval scores on the same axis production CI uses.
   `/eval-compare` — recent enough to include the native **`agent:` judge** type
   (PR #170) and **`execution.steps`** multi-step support (PR #172). Both are merged
   to `main`, so a current plugin has them; update an older install.
+  **Pin it for comparison runs.** Harness changes can alter step semantics, judge
+  behaviour or tool permissions, so a moving `main` silently makes two runs
+  incomparable. Check out a fixed harness commit/release for a comparison series and
+  record that revision (plus the `claude` CLI version) alongside the run.
 
 ## Setup (one-time)
 
@@ -87,10 +91,16 @@ strategy content and are rebuilt locally.
 # 1) Clone the internal prod data repo (source of real RFE snapshots + reference
 #    scores). Ask the strat-pipeline maintainers for its location; the build script
 #    takes any checkout via --data-repo.
-git clone --depth 1 <strat-pipeline-data repo> /tmp/strat-pipeline-data
+# The checkout holds internal RFE/strategy content, so keep it private: a
+# predictable /tmp path with the usual umask 022 is readable by other local users.
+DATA_DIR="$(umask 077 && mktemp -d)"
+git clone --depth 1 <strat-pipeline-data repo> "$DATA_DIR"
 
 # 2) Build the ~24-case stratified dataset from real prod triples
-python3 eval/scripts/build_dataset.py            # --data-repo <path> --force to override
+python3 eval/scripts/build_dataset.py --data-repo "$DATA_DIR/RHAISTRAT"   # --force to rebuild
+
+# 2b) Remove the internal checkout once the dataset is built
+rm -rf "$DATA_DIR"
 
 # 3) Stage read-only assets (assess-strat rubric + architecture-context)
 bash eval/scripts/stage-assets.sh                # also runs from the before_all hook if missing
@@ -136,7 +146,7 @@ architecture agent judge (`samples: 3`), so the full 24-case run is substantial
 
 ## Model comparison (Phase 2)
 
-Uncomment the `matrix:` block in `eval.yaml` and run:
+Uncomment the `matrix:` block in `eval/eval.yaml` and run:
 
 ```bash
 /eval-anova --config eval/eval.yaml       # sweeps the model factor with replications
@@ -151,10 +161,12 @@ all cells. Add `--baseline <run-id>` to activate the blind `pairwise` judge
 
 ## Files
 
-```
+```text
 eval/
   eval.yaml                 # harness config (claude-code runner, execution.steps, hooks, judges, matrix[commented])
-  prompts/*.md              # 4 per-dimension rubric judges (architecture-agent-judge.md is the agent judge) + pairwise
+  prompts/*.md              # rubric judges + pairwise. Architecture has TWO prompts:
+                            #   architecture-agent-judge.md  ACTIVE  (grounded agent judge, wired in eval.yaml)
+                            #   architecture-judge.md        legacy  (text-only, inflates to ~2.0; kept for the cheap variant)
   scripts/build_dataset.py  # materializes dataset/cases from strat-pipeline-data
   scripts/stage-assets.sh   # before_all hook: stages assess-strat + architecture-context into .assets/
   scripts/stage-case.sh     # before_each hook: rebuilds the per-case project tree + stages the create stub
@@ -179,6 +191,17 @@ eval/
   Architecture number.
 - **`expected_*` in `annotations.yaml` are single-sample prod references** — use them
   as calibration anchors (with `score_tolerance`), not hard gates.
+- **`architecture_context_used` cannot isolate refine.** `strategy-refine` is a
+  `context: fork` skill, so its tool calls run inside a fork that is not collected,
+  and with `execution.steps` the case-level `events.json` is the *last* step's
+  (review). The gate therefore reports whether the docs were opened anywhere in the
+  captured trace — largely the scorer/reviewers — so it is a smoke signal, not proof
+  the strategy was written from the docs. Capturing the fork transcript would make a
+  refine-scoped gate possible.
+- **Assets are fetched from moving branches.** `stage-assets.sh` clones `assess-strat`
+  and fetches `architecture-context` at HEAD, so a rubric or docs change between runs
+  can move scores independently of the model under test. Pin both (and the harness,
+  above) for a comparison series.
 - Pin the `claude` CLI version if you need run-to-run reproducibility (prod doesn't).
 
 ## Robustness coverage

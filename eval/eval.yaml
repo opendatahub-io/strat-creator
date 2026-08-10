@@ -240,34 +240,40 @@ judges:
       got = fm.get("recommendation")
       return (got == expected, f"recommendation={got} expected={expected} (total={tot}, zeros={z})")
 
-  # --- Grounding: did strategy-refine actually consult architecture-context?
-  #     Refine has no subagents, so its Read/Grep/Glob of the docs are top-level
-  #     events (parent_tool_use_id is null) — captured without any subagent hook.
-  #     Catches strategies that assert architecture without consulting the docs.
+  # --- Grounding: was architecture-context consulted anywhere the trace can see?
+  #
+  #     KNOWN LIMITATION — this does NOT isolate strategy-refine, despite being the
+  #     grounding signal we actually want. Two instrumentation facts, both verified
+  #     against real runs:
+  #       1. With execution.steps, the case-level stdout.log (and so events.json) is
+  #          the LAST step's — byte-identical to steps/review/stdout.log. So these
+  #          events are review's: the scorer and prose reviewers reading the docs.
+  #       2. strategy-refine is itself a `context: fork` skill, so its tool calls run
+  #          inside a fork whose transcript is not collected. steps/refine/stdout.log
+  #          holds only init/task_started/result — zero assistant tool calls in 72/72
+  #          cases across three runs.
+  #     Net: refine's grounding is currently unobservable, and a refine-scoped check
+  #     would fail 100% of cases rather than measure anything. This gate therefore
+  #     means "the pipeline opened the docs at some point", which is weaker than it
+  #     sounds — a strategy that asserts architecture without reading anything can
+  #     still pass on the reviewers' reads. Treat it as a smoke signal, not proof of
+  #     grounding, until the fork transcript is captured (see README follow-ups).
   - name: architecture_context_used
-    description: The pipeline consulted the architecture-context docs (grounding), not just asserted architecture.
+    description: architecture-context was consulted somewhere in the captured trace (review step + subagents; refine's forked work is not observable).
     check: |
-      # Count arch-context consultation ANYWHERE in the trace: Read/Grep/Glob of a
-      # doc path, or a Bash command touching the dir. Include subagents — refine
-      # often fetches via Bash while the scorer/reviewers Read the docs; all count
-      # as the pipeline grounding in architecture-context. (v1 counted only
-      # top-level Read/Grep/Glob and missed both, yielding false 0s.)
       events = outputs.get("events") or []
       if not events:
           return False, "no event trace (traces.events off or empty stdout)"
-      READ_TOOLS = {"Read", "Grep", "Glob"}
+      READ_TOOLS = {"Read", "Grep", "Glob", "Bash"}
       hits = 0
       for ev in events:
           if ev.get("type") != "assistant":
               continue
           for t in ev.get("tools", []):
-              name = t.get("name", "")
-              blob = str(t.get("input", {}))
-              if "architecture-context" not in blob:
-                  continue
-              if name in READ_TOOLS or name == "Bash":
+              if t.get("name") in READ_TOOLS and \
+                      "architecture-context" in str(t.get("input", {})):
                   hits += 1
-      return (hits > 0, f"tool calls consulting architecture-context (incl. subagents/Bash): {hits}")
+      return (hits > 0, f"tool calls consulting architecture-context (captured trace): {hits}")
 
   # --- Reported metric: the pipeline's OWN assess-strat total (0-8), for
   #     pipeline-vs-independent-judge agreement. Aggregates as a mean.
