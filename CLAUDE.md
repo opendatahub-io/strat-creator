@@ -115,3 +115,11 @@ When a local path is provided, the script copies the local architecture context 
 Overlays are cross-strategy architectural patches that live in the `overlays/` directory of the architecture-context repo. They capture facts that emerged between architecture context regeneration cycles (version bumps, maturity changes, dependency shifts). The fetch script includes `overlays/` in the sparse checkout automatically.
 
 See the [Overlays README](https://github.com/opendatahub-io/architecture-context/blob/main/overlays/README.md) for the format and lifecycle.
+
+## Eval Dataset Anonymization
+
+Files under `eval/dataset/` are built by `eval/scripts/build_dataset.py` from real RHAIRFE→RHAISTRAT triples and **must be anonymized** before they are committed or shared (they are git-ignored precisely because the raw build contains internal content). Never include real customer/partner names, individual names, email addresses, internal Slack / Google Docs / Miro / workshop links, or other personally identifiable or confidential information.
+
+Replace each with a fictional equivalent, and **web-search every replacement** to confirm it does not match a real entity — a placeholder that collides with a real company or person is not anonymized (e.g. "Meridian Bank" → "Cobalt National Bank" only after verifying the latter is fictional). Also web-search the original to confirm it is real before replacing. This applies to test inputs, annotations, and all reference files. Keep names consistent across files (same real entity → same fictional entity; derive handles/nicknames from the person's new name).
+
+**Kept as-is (not PII):** Red Hat and its products, upstream/OSS projects, public competitor products, generic role/team names (e.g. PSAP, Platform/Monitoring), RHAIRFE/RHAISTRAT ticket keys, and public GitHub/docs URLs.
