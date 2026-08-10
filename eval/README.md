@@ -20,8 +20,10 @@ rubric the pipeline itself uses (Feasibility / Testability / Scope / Architectur
   exactly like prod. Each step is a fresh Claude session (real topology), so
   cross-session handoff behaviour is preserved.
 - **Instrumentation:** the harness captures each step's stream-json → `events.json`
-  (`traces.events: true`) — giving judges the reasoning/tool trace (used by
-  `architecture_context_used`) — plus subagent transcripts and **per-step cost/tokens
+  (`traces.events: true`) — giving judges the reasoning/tool trace — plus **subagent
+  transcripts** (`cases/<case>/subagents/*.jsonl`, written by the harness SubagentStop
+  hook; this is where a `context: fork` skill's tool calls live, and what
+  `architecture_context_used` reads) and **per-step cost/tokens
   in `run_result.json`** (summed per case, including the scorer + all 4 forked
   reviewers). No hand-rolled `metrics.json` and no cli driver: the harness owns
   staging, execution, collection, and metrics natively.
@@ -57,7 +59,7 @@ rubric the pipeline itself uses (Feasibility / Testability / Scope / Architectur
 | `files_exist`, `strategy_nonempty` | check (gate) | The pipeline produced a filled strategy + a scored review. |
 | `frontmatter_valid` | check (gate) | Review frontmatter matches the `strat-review` schema (4 int scores, total = sum, valid enums). |
 | `recommendation_consistency` | check (gate) | The pipeline's recommendation matches the deterministic assess-strat verdict of its own scores. |
-| `architecture_context_used` | check (event trace) | The pipeline consulted the architecture-context docs (Read/Grep/Glob/Bash, incl. subagents). |
+| `architecture_context_used` | check (subagent transcripts) | **`strategy-refine` itself** consulted the architecture-context docs. Attributed to the refine step by session id, so the reviewers reading the docs while grading can't be mistaken for grounding. |
 | `cost_budget` | builtin | Per-case pipeline cost (refine + review, summed across steps in `run_result.json`); Pareto input. |
 
 The independent per-dimension total = sum of the four judge means. The four judge
@@ -188,15 +190,22 @@ eval/
   Architecture number.
 - **`expected_*` in `annotations.yaml` are single-sample prod references** — use them
   as calibration anchors (with `score_tolerance`), not hard gates.
-- **`architecture_context_used` cannot isolate refine.** `strategy-refine` is a
+- **`architecture_context_used` depends on subagent capture.** `strategy-refine` is a
   `context: fork` skill, so its tool calls land in a subagent transcript rather than
   `steps/refine/stdout.log`, and with `execution.steps` the case-level `stdout.log`
-  is the *last* step's (review). Subagent transcripts are captured
-  (`cases/<case>/subagents/*.jsonl`) but are per-case, not per-step, so refine's
-  reads can't be separated from the scorer's and reviewers'. The gate is therefore a
-  smoke signal — "the docs were opened somewhere in this case" — not proof the
-  strategy was written from them. A refine-scoped gate needs per-step attribution of
-  subagent transcripts.
+  is the *last* step's (review) — so an events-based check sees only the review
+  step's own top-level calls (Bash touching the docs directory, Agent invocations
+  naming it), never refine, and never even the reviewers' actual reads, which live in
+  the subagent transcripts. The gate instead reads
+  `cases/<case>/subagents/*.jsonl` and keeps the transcripts whose `sessionId` matches
+  the refine step's own `session_id`, which pins them to that step (the review step
+  always has a different one) and to that run — the collected `subagents/` directory
+  is only ever added to, so **re-running an existing run-id leaves earlier transcripts
+  in place** (this is part of what preflight's DIRTY warning is protecting you from).
+  It goes red if the SubagentStop hook is ever disabled: no transcripts, no evidence.
+  That is
+  deliberate — the run genuinely lost its instrumentation, and that should surface
+  rather than be papered over by counting the reviewers' reads.
 - **Never set `disableAllHooks` in a case workspace.** The harness installs its
   SubagentStop capture hook into the workspace `.claude/settings.json`, and
   `settings.local.json` outranks it, so a blanket disable silently deletes the

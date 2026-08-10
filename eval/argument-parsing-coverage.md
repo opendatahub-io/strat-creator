@@ -56,9 +56,9 @@ calls are not in `steps/refine/stdout.log`** — that file holds only `init` /
 `task_started` / the final assistant turn / `result`. The refusal text IS in that
 final turn, so the judges below work as written. Refine's tool calls go to a subagent
 transcript (`cases/<case>/subagents/*.jsonl`, captured by the harness SubagentStop
-hook), but those are per-case rather than per-step, so they cannot currently be
-attributed to refine specifically. (This is why `architecture_context_used` cannot
-isolate refine's grounding.)
+hook). That directory is per-case rather than per-step, but each transcript records
+the `sessionId` of the session that spawned it, and each step has its own session —
+which is how `architecture_context_used` attributes grounding to the refine step.
 
 The refine refusal is a top-level assistant turn in the **refine** step, saved at
 `<case_dir>/steps/refine/stdout.log` (`execute.py:1096-1099`), reachable via

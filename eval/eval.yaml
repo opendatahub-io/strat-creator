@@ -239,41 +239,105 @@ judges:
       got = fm.get("recommendation")
       return (got == expected, f"recommendation={got} expected={expected} (total={tot}, zeros={z})")
 
-  # --- Grounding: was architecture-context consulted anywhere the trace can see?
+  # --- Grounding: did strategy-refine itself consult architecture-context?
   #
-  #     KNOWN LIMITATION — this does NOT isolate strategy-refine, despite being the
-  #     grounding signal we actually want. Two instrumentation facts, both verified
-  #     against real runs:
-  #       1. With execution.steps, the case-level stdout.log (and so events.json) is
-  #          the LAST step's — byte-identical to steps/review/stdout.log. So these
-  #          events are review's: the scorer and prose reviewers reading the docs.
-  #       2. strategy-refine is itself a `context: fork` skill, so its tool calls
-  #          happen in a subagent, not in steps/refine/stdout.log (which holds only
-  #          init/task_started/result). They ARE captured — the harness's
-  #          SubagentStop hook writes cases/<case>/subagents/*.jsonl — but those
-  #          transcripts are per-CASE, not per-step, so refine's reads cannot be
-  #          told apart from the scorer's and reviewers'.
-  #     Net: this gate means "the docs were opened somewhere in the case", which is
-  #     weaker than it sounds — a strategy that asserts architecture without reading
-  #     anything still passes on the reviewers' reads. Treat it as a smoke signal,
-  #     not proof of grounding. Making it refine-scoped needs per-step subagent
-  #     attribution (see README follow-ups).
+  #     Neither obvious source works, both verified against real runs:
+  #       1. outputs["events"] is the LAST step's. In execution.mode: case the
+  #          case-level stdout.log IS steps/review/stdout.log (byte-identical, 24/24)
+  #          and events.json is parsed from that alone — collect.py only routes
+  #          subagent transcripts into events.json in BATCH mode — so the trace holds
+  #          no subagent entries at all. What its architecture-context hits actually
+  #          are, then, is the review step's own top-level calls: Bash touching the
+  #          docs directory, and Agent invocations whose prompt happens to name the
+  #          path (7 Bash + 5 Agent in a sampled case, zero Read/Grep/Glob). So it is
+  #          not even measuring the reviewers reading the docs, let alone refine — and
+  #          because refine's activity is absent from that trace entirely, its
+  #          behaviour cannot move the result either way.
+  #       2. steps/refine/stdout.log carries the invocation, exactly one assistant
+  #          turn and the result, but ZERO assistant tool_use blocks (24/24 cases):
+  #          refine is a `context: fork` skill, so its tool calls happen in a
+  #          subagent. (That lone assistant turn is still where a refusal would be
+  #          expected to surface — see argument-parsing-coverage.md, which relies on
+  #          it. Not yet confirmed against a real refusal.)
+  #     Those forked calls are captured by the harness SubagentStop hook in
+  #     cases/<case>/subagents/*.jsonl. That directory is per-case, so transcripts are
+  #     matched to the refine STEP by session id: the step's own stdout.log carries
+  #     session_id, every subagent it spawns repeats it as sessionId, and the review
+  #     step always gets a different one (24/24 cases). Matching on the skill path
+  #     instead would be wrong twice over. It would over-count, because the collected
+  #     output directory is only ever added to (subagents/ is created with
+  #     exist_ok=True and copied into, never cleared), so re-running a run-id leaves
+  #     earlier transcripts sitting where judges read them — observed once, inflating
+  #     a case from 14 reads to 22. And it would under-count, by discarding refine's
+  #     own nested subagents, whose reads are still refine's work.
+  #     Fails closed when the transcripts are missing, which is correct: no capture
+  #     means no evidence, and that should surface rather than silently pass on the
+  #     reviewers' reads.
   - name: architecture_context_used
-    description: architecture-context was consulted somewhere in the captured trace (review step + subagents; refine's forked work is not observable).
+    description: strategy-refine itself consulted the architecture-context docs (grounding), not just asserted architecture.
     check: |
-      events = outputs.get("events") or []
-      if not events:
-          return False, "no event trace (traces.events off or empty stdout)"
-      READ_TOOLS = {"Read", "Grep", "Glob", "Bash"}
-      hits = 0
-      for ev in events:
-          if ev.get("type") != "assistant":
+      import glob, json, os
+      base = outputs.get("case_dir") or ""
+      step_log = os.path.join(base, "steps", "refine", "stdout.log")
+      if not os.path.exists(step_log):
+          return False, "no steps/refine/stdout.log (needs execution.steps + traces.stdout)"
+
+      # The refine step's own Claude Code session id. Every subagent it spawns carries the
+      # same sessionId, and the review step gets a different one, so this attributes work
+      # to the refine STEP -- not to the reviewers, and not to a stale transcript left in a
+      # reused workspace (subagents/ is copied, never cleared, so leftovers do occur).
+      session = None
+      for line in open(step_log, encoding="utf-8", errors="replace"):
+          line = line.strip()
+          if not line.startswith("{"):
               continue
-          for t in ev.get("tools", []):
-              if t.get("name") in READ_TOOLS and \
-                      "architecture-context" in str(t.get("input", {})):
-                  hits += 1
-      return (hits > 0, f"tool calls consulting architecture-context (captured trace): {hits}")
+          try:
+              ev = json.loads(line)
+          except ValueError:
+              continue
+          if ev.get("session_id"):
+              session = ev["session_id"]
+              break
+      if not session:
+          return False, "refine step log has no session_id"
+
+      transcripts = sorted(glob.glob(os.path.join(base, "subagents", "*.jsonl")))
+      if not transcripts:
+          return False, "no subagent transcripts (SubagentStop capture disabled?)"
+
+      READ_TOOLS = {"Read", "Grep", "Glob", "Bash"}
+      seen = 0
+      hits = 0
+      for path in transcripts:
+          try:
+              with open(path, encoding="utf-8", errors="replace") as fh:
+                  lines = fh.readlines()
+          except OSError:
+              continue
+          if not lines:
+              continue
+          try:
+              first = json.loads(lines[0])
+          except ValueError:
+              continue
+          if first.get("sessionId") != session:
+              continue
+          seen += 1
+          for line in lines:
+              if "architecture-context" not in line:
+                  continue
+              try:
+                  ev = json.loads(line)
+              except ValueError:
+                  continue
+              for b in (ev.get("message") or {}).get("content") or []:
+                  if not isinstance(b, dict) or b.get("type") != "tool_use":
+                      continue
+                  if b.get("name") in READ_TOOLS and "architecture-context" in str(b.get("input", {})):
+                      hits += 1
+      if not seen:
+          return False, "no subagent transcript belongs to the refine session"
+      return hits > 0, "refine session read architecture-context {}x (across {} of its transcripts)".format(hits, seen)
 
   # --- Reported metric: the pipeline's OWN assess-strat total (0-8), for
   #     pipeline-vs-independent-judge agreement. Aggregates as a mean.
