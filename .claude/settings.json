@@ -21,8 +21,7 @@
       "Bash(python3 .context/assess-strat/scripts/parse_results.py *)",
       "Bash(python3 .context/assess-strat/scripts/summarize_run.py *)",
       "Bash(python3 .context/assess-strat/scripts/export_rubric.py *)",
-      "Edit(artifacts/**)",
-      "Write(artifacts/**)"
+      "Edit(artifacts/**)"
     ],
     "additionalDirectories": [
       "/tmp/strat-assess",
