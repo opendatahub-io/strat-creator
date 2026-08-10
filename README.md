@@ -130,6 +130,7 @@ strat-creator/
 │   ├── frontmatter.py          # YAML frontmatter read/write/schema
 │   ├── state.py                # State persistence for long-running skills
 │   ├── apply_scores.py         # Apply scorer results to review frontmatter
+│   ├── validate_strat_testability.py  # Structural validation for test plan readiness
 │   ├── fetch_issue.py          # Jira REST API fallback
 │   ├── jira_utils.py           # Jira API, JQL search, pre-filtering
 │   ├── list-rfe-ids.py         # RFE discovery (JQL, config, batching)
