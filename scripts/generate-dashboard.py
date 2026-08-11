@@ -814,6 +814,9 @@ body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans
 .header {{ margin-bottom: 24px; }}
 .header h1 {{ font-size: 28px; color: #f0f6fc; margin-bottom: 4px; }}
 .header .subtitle {{ color: #8b949e; font-size: 13px; }}
+.header-row {{ display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }}
+.header-link {{ background: #161b22; border: 1px solid #30363d; border-radius: 6px; color: #58a6ff; font-size: 13px; font-weight: 600; padding: 8px 14px; text-decoration: none; white-space: nowrap; }}
+.header-link:hover {{ background: #1f2630; border-color: #58a6ff; }}
 
 /* Nav */
 .nav-tabs {{ display: flex; gap: 0; margin-bottom: 24px; border-bottom: 2px solid #21262d; }}
@@ -950,18 +953,24 @@ tr.clickable {{ cursor: pointer; }}
 <body>
 
 <div class="header">
-    <h1>AgenticCI — AI First — Strat Refinement & Review Dashboard</h1>
-    <div class="subtitle">Generated {timestamp} | {len(runs)} run(s) tracked</div>
+    <div class="header-row">
+        <div>
+            <h1>AgenticCI — AI First — Strat Refinement & Review Dashboard</h1>
+            <div class="subtitle">Generated {timestamp} | {len(runs)} run(s) tracked</div>
+        </div>
+        <a class="header-link" href="evals-report.html">Agent Eval Report ↗</a>
+    </div>
 </div>
 
 <div style="background:#1c1f26;border:1px solid #30363d;border-left:4px solid #58a6ff;border-radius:8px;padding:20px 24px;margin-bottom:24px;line-height:1.7">
-    <div style="font-size:15px;font-weight:600;color:#58a6ff;margin-bottom:8px">Scored Review Pipeline</div>
+    <div style="font-size:15px;font-weight:600;color:#58a6ff;margin-bottom:8px">Agent Eval Report — 2026-08-10 · claude-opus-4-6</div>
     <div style="font-size:13px;color:#8b949e">
-        Strategies are scored on <strong style="color:#c9d1d9">four dimensions</strong> (Feasibility, Testability, Scope, Architecture) using a <strong style="color:#c9d1d9">calibrated rubric</strong> with 12 examples from real pipeline output.
-        Each dimension is scored 0–2. Total: 8 points. Verdicts are <strong style="color:#c9d1d9">deterministic</strong> — computed from scores by code, not LLM judgment.
+        The pipeline's own scoring is checked against an <strong style="color:#c9d1d9">independent judge</strong> over a 24-case eval suite.
+        Latest run: <strong style="color:#c9d1d9">24/24 cases green</strong> (exit 0), all <strong style="color:#c9d1d9">11 judge thresholds passed</strong>,
+        pipeline total <strong style="color:#c9d1d9">5.04/8</strong> vs independent judge <strong style="color:#c9d1d9">5.46/8</strong>.
         <br>
-        <strong style="color:#c9d1d9">Verdict rules:</strong> APPROVE (≥6, no zeros) auto-passes. REVISE and REJECT get <code style="background:#21262d;padding:2px 6px;border-radius:3px">needs-attention</code> for human review.
-        Production runs — data written to Jira.
+        <strong style="color:#c9d1d9">Open gap:</strong> Feasibility is saturated at 1 (23/24 cases) — refine documents critical-path open questions instead of resolving or timeboxing them, which caps the pipeline at ~5/8.
+        <a href="evals-report.html" style="color:#58a6ff;text-decoration:none;font-weight:600">Read the full report →</a>
     </div>
 </div>
 
