@@ -815,8 +815,18 @@ body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans
 .header h1 {{ font-size: 28px; color: #f0f6fc; margin-bottom: 4px; }}
 .header .subtitle {{ color: #8b949e; font-size: 13px; }}
 .header-row {{ display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }}
+.header-links {{ display: flex; gap: 8px; flex-wrap: wrap; }}
 .header-link {{ background: #161b22; border: 1px solid #30363d; border-radius: 6px; color: #58a6ff; font-size: 13px; font-weight: 600; padding: 8px 14px; text-decoration: none; white-space: nowrap; }}
 .header-link:hover {{ background: #1f2630; border-color: #58a6ff; }}
+
+/* Report cards */
+.report-cards {{ display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-bottom: 24px; }}
+.report-card {{ display: flex; flex-direction: column; background: #1c1f26; border: 1px solid #30363d; border-left: 4px solid #58a6ff; border-radius: 8px; padding: 20px 24px; line-height: 1.7; text-decoration: none; }}
+.report-card:hover {{ background: #21252e; border-color: #58a6ff; }}
+.report-card-title {{ font-size: 15px; font-weight: 600; color: #58a6ff; margin-bottom: 8px; }}
+.report-card-body {{ font-size: 13px; color: #8b949e; flex: 1; }}
+.report-card-body strong {{ color: #c9d1d9; }}
+.report-card-cta {{ font-size: 13px; font-weight: 600; color: #58a6ff; margin-top: 10px; }}
 
 /* Nav */
 .nav-tabs {{ display: flex; gap: 0; margin-bottom: 24px; border-bottom: 2px solid #21262d; }}
@@ -947,6 +957,7 @@ tr.clickable {{ cursor: pointer; }}
     .kpi-grid {{ grid-template-columns: repeat(2, 1fr); }}
     .charts-grid {{ grid-template-columns: 1fr; }}
     .two-col {{ grid-template-columns: 1fr; }}
+    .report-cards {{ grid-template-columns: 1fr; }}
 }}
 </style>
 </head>
@@ -958,20 +969,32 @@ tr.clickable {{ cursor: pointer; }}
             <h1>AgenticCI — AI First — Strat Refinement & Review Dashboard</h1>
             <div class="subtitle">Generated {timestamp} | {len(runs)} run(s) tracked</div>
         </div>
-        <a class="header-link" href="evals-report.html">Agent Eval Report ↗</a>
+        <div class="header-links">
+            <a class="header-link" href="value-report.html">Strategy Value Report ↗</a>
+            <a class="header-link" href="evals-report.html">Agent Eval Report ↗</a>
+        </div>
     </div>
 </div>
 
-<div style="background:#1c1f26;border:1px solid #30363d;border-left:4px solid #58a6ff;border-radius:8px;padding:20px 24px;margin-bottom:24px;line-height:1.7">
-    <div style="font-size:15px;font-weight:600;color:#58a6ff;margin-bottom:8px">Agent Eval Report — 2026-08-10 · claude-opus-4-6</div>
-    <div style="font-size:13px;color:#8b949e">
-        The pipeline's own scoring is checked against an <strong style="color:#c9d1d9">independent judge</strong> over a 24-case eval suite.
-        Latest run: <strong style="color:#c9d1d9">24/24 cases green</strong> (exit 0), all <strong style="color:#c9d1d9">11 judge thresholds passed</strong>,
-        pipeline total <strong style="color:#c9d1d9">5.04/8</strong> vs independent judge <strong style="color:#c9d1d9">5.46/8</strong>.
-        <br>
-        <strong style="color:#c9d1d9">Open gap:</strong> Feasibility is saturated at 1 (23/24 cases) — refine documents critical-path open questions instead of resolving or timeboxing them, which caps the pipeline at ~5/8.
-        <a href="evals-report.html" style="color:#58a6ff;text-decoration:none;font-weight:600">Read the full report →</a>
-    </div>
+<div class="report-cards">
+    <a class="report-card" href="value-report.html">
+        <div class="report-card-title">Strategy Value Report — 2026-08-06</div>
+        <div class="report-card-body">
+            Was first-pass AI strategy generation worth it? Every concept in every draft — <strong>1,812 concepts across 150 strategies</strong> — audited against the final signed text.
+            <strong>80% of first-pass strategies held</strong>; a majority of their concepts survived engaged review.
+            The correction tax is real but concentrated: <strong>337 false assertions</strong> across 61% of issues, ~19% of review statements.
+        </div>
+        <div class="report-card-cta">Read the full report →</div>
+    </a>
+    <a class="report-card" href="evals-report.html">
+        <div class="report-card-title">Agent Eval Report — 2026-08-10 · claude-opus-4-6</div>
+        <div class="report-card-body">
+            The pipeline's own scoring, checked against an <strong>independent judge</strong> over a 24-case eval suite.
+            Latest run: <strong>24/24 cases green</strong> (exit 0), all <strong>11 judge thresholds passed</strong>, pipeline total <strong>5.04/8</strong> vs independent judge <strong>5.46/8</strong>.
+            Open gap: Feasibility is saturated at 1 (23/24) — refine documents critical-path open questions instead of retiring them.
+        </div>
+        <div class="report-card-cta">Read the full report →</div>
+    </a>
 </div>
 
 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
