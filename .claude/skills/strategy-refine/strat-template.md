@@ -57,7 +57,10 @@ Scale output depth to match the strategy size. All sizes produce all sections �
 <!-- [P0] Must have — blocks ship -->
 <!-- [P1] Should have — important but not blocking -->
 <!-- [P2] Nice to have — defer if effort exceeds estimate -->
+<!-- [Deferred] Explicitly out of scope for this release -->
 <!-- If ALL items are P0, flag that prioritization may be incomplete. -->
+<!-- When an HLR is already implemented, append status: — *DONE* (PR #NNN) -->
+<!-- This prevents downstream consumers (test plans, epics) from planning work that's already complete. -->
 
 ### Dependencies
 <!-- S: 1-3 dependencies. M: 3-5. L: 5-8. XL: 6-10. -->
@@ -72,6 +75,9 @@ Scale output depth to match the strategy size. All sizes produce all sections �
 <!-- Every NFR must cite its source: (RFE), (architecture context: <doc>), or (Staff Engineer / SME Input). -->
 <!-- Do NOT invent numeric thresholds. If no source specifies a metric, flag it in Open Questions. -->
 <!-- Do NOT write: "good performance", "secure access", "high availability" — not testable. -->
+<!-- Each NFR MUST have either a measurable target (e.g., "P95 < 500ms") or an explicit -->
+<!-- "target TBD — blocked on <document type>" note. Unmeasurable NFRs become untestable gaps -->
+<!-- that surface during test plan creation. -->
 - **Performance**: <cite source for each metric; flag missing targets in Open Questions>
 - **Security**: <AuthN/AuthZ, RBAC scope — cite architecture context docs>
 - **Backwards Compatibility**: <migration path, deprecation timeline>
@@ -123,8 +129,10 @@ Scale output depth to match the strategy size. All sizes produce all sections �
 <!-- Each question: 1 line. Only include questions that block sprint 1 or change the approach. -->
 <!-- Include gaps flagged by other sections: missing NFR metrics, -->
 <!-- unresolved personas, dependency status unknowns, AC that need PM confirmation. -->
-<!-- Format: **Question?** *(Owner: team)* — why it matters -->
-- **<question>?** *(Owner: <who can answer>)* — <impact if unresolved>
+<!-- Format: **Question?** *(Owner: team)* — would be resolved by: <document type> -->
+<!-- Document types: ADR, design doc, feature refinement, API spec, PoC results -->
+<!-- This format enables downstream consumers (test plans, epics) to auto-categorize gaps. -->
+- **<question>?** *(Owner: <who can answer>)* — would be resolved by: <ADR / design doc / feature refinement>
 
 ### Supporting Documentation
 <!-- Links only. No descriptions — link text should be self-explanatory. -->
