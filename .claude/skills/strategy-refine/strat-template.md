@@ -59,8 +59,9 @@ Scale output depth to match the strategy size. All sizes produce all sections �
 <!-- [P2] Nice to have — defer if effort exceeds estimate -->
 <!-- [Deferred] Explicitly out of scope for this release -->
 <!-- If ALL items are P0, flag that prioritization may be incomplete. -->
-<!-- When an HLR is already implemented, append status: — *DONE* (PR #NNN) -->
-<!-- This prevents downstream consumers (test plans, epics) from planning work that's already complete. -->
+<!-- When an HLR is already implemented, append status: — **DONE** ([org/repo#NNN](url)) -->
+<!-- Use repository-qualified PR links (e.g., opendatahub-io/models-as-a-service#1363). -->
+<!-- Only mark DONE after verifying the linked PR implements the HLR. -->
 
 ### Dependencies
 <!-- S: 1-3 dependencies. M: 3-5. L: 5-8. XL: 6-10. -->
