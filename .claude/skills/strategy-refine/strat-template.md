@@ -130,10 +130,8 @@ Scale output depth to match the strategy size. All sizes produce all sections �
 <!-- Each question: 1 line. Only include questions that block sprint 1 or change the approach. -->
 <!-- Include gaps flagged by other sections: missing NFR metrics, -->
 <!-- unresolved personas, dependency status unknowns, AC that need PM confirmation. -->
-<!-- Format: **Question?** *(Owner: team)* — would be resolved by: <document type> -->
-<!-- Document types: ADR, design doc, feature refinement, API spec, PoC results -->
-<!-- This format enables downstream consumers (test plans, epics) to auto-categorize gaps. -->
-- **<question>?** *(Owner: <who can answer>)* — would be resolved by: <ADR / design doc / feature refinement>
+<!-- Format: **Question?** *(Owner: team)* — why it matters -->
+- **<question>?** *(Owner: <who can answer>)* — <impact if unresolved>
 
 ### Supporting Documentation
 <!-- Links only. No descriptions — link text should be self-explanatory. -->
