@@ -1,0 +1,87 @@
+# Triggers the strat-creator eval, which runs in GitLab (strat-creator-eval).
+#
+# Required GitHub secrets (Settings → Secrets and variables → Actions):
+#   GITLAB_TRIGGER_TOKEN  — GitLab pipeline trigger token
+#   GITLAB_TRIGGER_URL    — https://gitlab.com/api/v4/projects/<project-id>/trigger/pipeline
+#                           (project: redhat/rhel-ai/agentic-ci/strat-creator-eval)
+#
+# Manually triggered by a maintainer from the Actions tab. Enter the PR
+# number to evaluate. Only users with write access can run this workflow.
+#
+# Everything else — eval config, model — comes from the GitLab project's CI/CD
+# variable defaults, which are editable in GitLab's own "Run pipeline" form for
+# one-off runs. Overriding them from here would mean duplicating those defaults
+# in a second place and keeping them in sync.
+#
+# The GitLab pipeline clones this repo at the PR head SHA and runs
+# eval/eval.yaml (the create → refine → review pipeline eval) inside an
+# OpenShell sandbox, then posts eval results back to the PR as a comment.
+# That comment is posted with a GitHub App whose credentials live only on the
+# GitLab side and never enter the OpenShell sandbox, so no token for writing
+# back to this repo is needed here — the permissions below stay read-only.
+#
+# Note: eval/dataset/cases/ is git-ignored (it holds internal RFE and strategy
+# content), so the GitLab side builds it with eval/scripts/build_dataset.py from
+# the internal strat-pipeline-data repo. Nothing about that lives here.
+
+name: strat-creator-eval
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "PR number to evaluate"
+        required: true
+        type: number
+      quick_mode:
+        description: "Quick mode: 1 case only (smoke test)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  trigger-eval:
+    name: Trigger GitLab eval pipeline
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch PR details
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PR_JSON=$(gh api "repos/${{ github.repository }}/pulls/${{ inputs.pr_number }}")
+          echo "sha=$(echo "$PR_JSON" | jq -r '.head.sha')" >> "$GITHUB_OUTPUT"
+          echo "ref=$(echo "$PR_JSON" | jq -r '.head.ref')" >> "$GITHUB_OUTPUT"
+
+      - name: Trigger strat-creator-eval on GitLab
+        env:
+          GITLAB_TRIGGER_TOKEN: ${{ secrets.GITLAB_TRIGGER_TOKEN }}
+          GITLAB_TRIGGER_URL: ${{ secrets.GITLAB_TRIGGER_URL }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          PR_SHA: ${{ steps.pr.outputs.sha }}
+          PR_REF: ${{ steps.pr.outputs.ref }}
+          REPO: ${{ github.repository }}
+          QUICK_MODE: ${{ inputs.quick_mode }}
+        run: |
+          curl --fail-with-body \
+            --request POST \
+            --form "token=${GITLAB_TRIGGER_TOKEN}" \
+            --form "ref=main" \
+            --form "variables[GITHUB_PR_NUMBER]=${PR_NUMBER}" \
+            --form "variables[GITHUB_SHA]=${PR_SHA}" \
+            --form "variables[GITHUB_HEAD_REF]=${PR_REF}" \
+            --form "variables[GITHUB_REPO]=${REPO}" \
+            --form "variables[QUICK_MODE]=${QUICK_MODE}" \
+            --output response.json \
+            "${GITLAB_TRIGGER_URL}" || { cat response.json; exit 1; }
+
+          # The eval takes hours and reports back on the PR, so surface the
+          # pipeline link here rather than leaving the maintainer to find it.
+          PIPELINE_URL=$(jq -r '.web_url // empty' response.json 2>/dev/null || true)
+          echo "Triggered ${PIPELINE_URL:-(pipeline URL not in response)}"
+          if [ -n "${PIPELINE_URL}" ]; then
+            echo "[GitLab pipeline for PR #${PR_NUMBER}](${PIPELINE_URL})" >> "$GITHUB_STEP_SUMMARY"
+          fi
