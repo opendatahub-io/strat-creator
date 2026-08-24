@@ -33,7 +33,14 @@ import subprocess
 import sys
 import urllib.request
 
-from jira_utils import adf_to_markdown, get_comments, get_issue, require_env, ssl_ctx
+from jira_utils import (
+    adf_to_markdown,
+    attachment_sort_key,
+    get_comments,
+    get_issue,
+    require_env,
+    ssl_ctx,
+)
 
 MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024  # 10 MB
 
@@ -99,6 +106,18 @@ def _download_attachment(url, dest_path, user, token):
             f.write(resp.read())
 
 
+def _newest_attachments_by_filename(attachments):
+    """Return the newest attachment for each persisted filename."""
+    newest_by_name = {}
+    for att in attachments:
+        filename = _sanitize_filename(att.get("filename") or "")
+        current = newest_by_name.get(filename)
+        if (current is None or
+                attachment_sort_key(att) > attachment_sort_key(current)):
+            newest_by_name[filename] = att
+    return newest_by_name
+
+
 def _fetch_attachments(attachments, issue_key, artifacts_dir, user, token):
     """Download text-based attachments to artifacts/attachments/{key}/."""
     if not attachments:
@@ -106,6 +125,7 @@ def _fetch_attachments(attachments, issue_key, artifacts_dir, user, token):
     att_dir = os.path.join(artifacts_dir, "attachments", issue_key)
     os.makedirs(att_dir, exist_ok=True)
     count = 0
+    text_attachments = []
     for att in attachments:
         if not _is_text_attachment(att):
             filename = att.get("filename", "?")
@@ -114,6 +134,11 @@ def _fetch_attachments(attachments, issue_key, artifacts_dir, user, token):
                   f"(type={att.get('mimeType')}, {size_kb}KB)",
                   file=sys.stderr)
             continue
+        text_attachments.append(att)
+
+    # Attachments use singular filenames. Keep the newest copy so repeated
+    # uploads do not make the result depend on Jira list ordering.
+    for att in _newest_attachments_by_filename(text_attachments).values():
         filename = _sanitize_filename(att.get("filename", "unnamed"))
         dest = os.path.join(att_dir, filename)
         content_url = att.get("content", "")

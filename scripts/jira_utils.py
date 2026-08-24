@@ -524,8 +524,31 @@ def download_attachment(server, user, token, content_url, dest_path):
             f.write(resp.read())
 
 
+def attachment_sort_key(attachment):
+    """Return a deterministic key for selecting the newest attachment.
+
+    Callers should use ``max(..., key=attachment_sort_key)``. Jira's
+    ``created`` timestamp is authoritative; attachment ID breaks ties, with
+    the content URL as a final stable tie-breaker.
+    """
+    created = str(attachment.get("created") or "")
+    raw_id = str(attachment.get("id") or "")
+    try:
+        id_key = (1, int(raw_id))
+    except ValueError:
+        id_key = (0, raw_id)
+    content_url = str(attachment.get("content") or "")
+    return created, id_key, content_url
+
+
 def delete_attachment(server, user, token, attachment_id, max_retries=3):
-    """DELETE /rest/api/3/attachment/{id} — remove an attachment."""
+    """Delete a Jira attachment.
+
+    Deprecated: the strat-creator pipeline intentionally no longer deletes
+    attachments. CI and human-run flows may use credentials without
+    attachment-delete permission, so callers should use append-only uploads
+    and make readers select the authoritative or newest copy instead.
+    """
     url = f"{server.rstrip('/')}/rest/api/3/attachment/{attachment_id}"
     credentials = base64.b64encode(f"{user}:{token}".encode()).decode()
     headers = {
@@ -1175,5 +1198,3 @@ def reconstruct_business_need_file(strategy_path, rfe_path):
     with open(strategy_path, "w", encoding="utf-8") as f:
         f.write(frontmatter + new_body)
     return True
-
-
