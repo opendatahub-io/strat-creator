@@ -51,8 +51,14 @@ jobs:
         id: pr
         env:
           GH_TOKEN: ${{ github.token }}
+          # Through env, not `${{ }}` in the script: a workflow_dispatch input is
+          # expanded into the shell before bash sees it, and `type: number` is a
+          # UI hint rather than a constraint the API enforces. The step below
+          # already reads its values this way.
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ inputs.pr_number }}
         run: |
-          PR_JSON=$(gh api "repos/${{ github.repository }}/pulls/${{ inputs.pr_number }}")
+          PR_JSON=$(gh api "repos/${REPO}/pulls/${PR_NUMBER}")
           echo "sha=$(echo "$PR_JSON" | jq -r '.head.sha')" >> "$GITHUB_OUTPUT"
           echo "ref=$(echo "$PR_JSON" | jq -r '.head.ref')" >> "$GITHUB_OUTPUT"
 
@@ -68,13 +74,13 @@ jobs:
         run: |
           curl --fail-with-body \
             --request POST \
-            --form "token=${GITLAB_TRIGGER_TOKEN}" \
-            --form "ref=main" \
-            --form "variables[GITHUB_PR_NUMBER]=${PR_NUMBER}" \
-            --form "variables[GITHUB_SHA]=${PR_SHA}" \
-            --form "variables[GITHUB_HEAD_REF]=${PR_REF}" \
-            --form "variables[GITHUB_REPO]=${REPO}" \
-            --form "variables[QUICK_MODE]=${QUICK_MODE}" \
+            --form-string "token=${GITLAB_TRIGGER_TOKEN}" \
+            --form-string "ref=main" \
+            --form-string "variables[GITHUB_PR_NUMBER]=${PR_NUMBER}" \
+            --form-string "variables[GITHUB_SHA]=${PR_SHA}" \
+            --form-string "variables[GITHUB_HEAD_REF]=${PR_REF}" \
+            --form-string "variables[GITHUB_REPO]=${REPO}" \
+            --form-string "variables[QUICK_MODE]=${QUICK_MODE}" \
             --output response.json \
             "${GITLAB_TRIGGER_URL}" || { cat response.json; exit 1; }
 
