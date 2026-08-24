@@ -3,6 +3,12 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
+
+from fetch_issue import _newest_attachments_by_filename
+from jira_utils import add_attachment
 
 SCRIPT = os.path.join(os.path.dirname(__file__), "..", "scripts", "fetch_issue.py")
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -26,6 +32,63 @@ def _run(jira, args, env_override=None, cwd=None):
 
 
 class TestFetchIssue:
+
+    def test_sanitized_filename_collision_keeps_newest(self):
+        attachments = [
+            {"filename": "report?.md", "id": "30",
+             "created": "2026-08-24T12:00:00.000+0000",
+             "content": "https://jira/30"},
+            {"filename": "report*.md", "id": "31",
+             "created": "2026-08-24T13:00:00.000+0000",
+             "content": "https://jira/31"},
+        ]
+        for ordered in (attachments, list(reversed(attachments))):
+            selected = _newest_attachments_by_filename(ordered)
+            assert list(selected) == ["report_.md"]
+            assert selected["report_.md"]["id"] == "31"
+
+    def test_equal_created_timestamp_is_order_independent(self):
+        attachments = [
+            {"filename": "duplicate.md", "id": "20",
+             "created": "2026-08-24T12:00:00.000+0000",
+             "content": "https://jira/20"},
+            {"filename": "duplicate.md", "id": "21",
+             "created": "2026-08-24T12:00:00.000+0000",
+             "content": "https://jira/21"},
+        ]
+        selected = [
+            _newest_attachments_by_filename(ordered)["duplicate.md"]["id"]
+            for ordered in (attachments, list(reversed(attachments)))
+        ]
+        assert selected == ["21", "21"]
+
+    def test_fetch_all_keeps_newest_duplicate_filename(self, jira, art_dir):
+        jira.create("RHAIRFE-2004", "Duplicate attachments",
+                    "Description for duplicate attachment test.")
+
+        def upload(content):
+            with tempfile.NamedTemporaryFile(
+                    mode="w", suffix=".md", delete=False,
+                    encoding="utf-8") as f:
+                f.write(content)
+                path = f.name
+            try:
+                add_attachment(jira.url, "admin", "admin", "RHAIRFE-2004",
+                               path, filename="duplicate.md")
+            finally:
+                os.unlink(path)
+
+        upload("old attachment\n")
+        upload("new attachment\n")
+
+        artifacts = str(art_dir / "artifacts")
+        result = _run(jira, ["RHAIRFE-2004", "--fetch-all", artifacts],
+                      cwd=PROJECT_ROOT)
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+
+        path = (art_dir / "artifacts" / "attachments" / "RHAIRFE-2004" /
+                "duplicate.md")
+        assert path.read_text() == "new attachment\n"
 
     def test_fetches_issue_as_json(self, jira):
         jira.create("RHAIRFE-2000", "Pipeline autoscaling",

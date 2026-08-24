@@ -3,6 +3,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
 
@@ -14,6 +15,7 @@ from jira_utils import (
     build_rfe_reference,
     markdown_to_adf,
 )
+from pull_strategy import _newest_attachment
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 SCRIPT = os.path.join(PROJECT_ROOT, "scripts", "pull_strategy.py")
@@ -214,7 +216,35 @@ def _upload_strategy_attachment(jira, strat_key, strategy_content):
         os.unlink(tmp_path)
 
 
+def _upload_review_attachment(jira, strat_key, review_content):
+    """Upload a review markdown file as an attachment."""
+    with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".md", delete=False, encoding="utf-8") as f:
+        f.write(review_content)
+        tmp_path = f.name
+    try:
+        add_attachment(jira.url, "admin", "admin", strat_key,
+                       tmp_path, filename=f"{strat_key}-review.md")
+    finally:
+        os.unlink(tmp_path)
+
+
 class TestPullWithStrategyAttachment:
+
+    def test_equal_created_timestamp_is_order_independent(self):
+        attachments = [
+            {"filename": "RHAISTRAT-2040-strategy.md", "id": "10",
+             "created": "2026-08-24T12:00:00.000+0000",
+             "content": "https://jira/10"},
+            {"filename": "RHAISTRAT-2040-strategy.md", "id": "11",
+             "created": "2026-08-24T12:00:00.000+0000",
+             "content": "https://jira/11"},
+        ]
+        selected = [
+            _newest_attachment(ordered, "RHAISTRAT-2040-strategy.md")["id"]
+            for ordered in (attachments, list(reversed(attachments)))
+        ]
+        assert selected == ["11", "11"]
 
     def test_pulls_strategy_from_attachment(self, jira, tmp_path):
         stub_desc = (
@@ -288,6 +318,79 @@ class TestPullWithStrategyAttachment:
         content = strat_path.read_text()
         assert "Technical Approach" in content
         assert "Use MIG profiles" in content
+
+    def test_ignores_orphan_strategy_attachment(self, jira, tmp_path):
+        desc = (
+            "## Business Need (from RFE)\n\n"
+            "Users need GPU sharing.\n\n"
+            f"{STRATEGY_HEADING}\n\n"
+            "### Technical Approach\n\n"
+            "Current strategy from the description.\n"
+        )
+        jira.create("RHAISTRAT-2043", "Orphan attachment", desc,
+                    labels=["strat-creator-rubric-pass"])
+        jira.create("RHAIRFE-3043", "GPU RFE", "GPU sharing needed.")
+        jira.request("POST", "/rest/api/3/issueLink", {
+            "type": {"name": "Cloners"},
+            "inwardIssue": {"key": "RHAISTRAT-2043"},
+            "outwardIssue": {"key": "RHAIRFE-3043"},
+        })
+        _upload_strategy_attachment(
+            jira, "RHAISTRAT-2043",
+            f"{STRATEGY_HEADING}\n\n### Technical Approach\n\n"
+            "Stale strategy from an orphan attachment.\n")
+
+        local_dir = tmp_path / "local"
+        result = _run(jira, "RHAISTRAT-2043", local_dir)
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+        content = (local_dir / "strat-tasks" / "RHAISTRAT-2043.md").read_text()
+        assert "Current strategy from the description" in content
+        assert "Stale strategy from an orphan attachment" not in content
+        assert "Ignoring orphan attachment" in result.stdout
+
+    def test_selects_newest_strategy_attachment(self, jira, tmp_path):
+        stub_desc = (
+            f"{STRATEGY_HEADING}\n\n"
+            "> **Note:** The full strategy exceeds Jira's description size "
+            "limit and is stored as an attachment: "
+            "`RHAISTRAT-2044-strategy.md`.\n"
+        )
+        jira.create("RHAISTRAT-2044", "Newest strategy attachment", stub_desc,
+                    labels=["strat-creator-rubric-pass"])
+        jira.create("RHAIRFE-3044", "GPU RFE", "GPU sharing needed.")
+        jira.request("POST", "/rest/api/3/issueLink", {
+            "type": {"name": "Cloners"},
+            "inwardIssue": {"key": "RHAISTRAT-2044"},
+            "outwardIssue": {"key": "RHAIRFE-3044"},
+        })
+        _upload_strategy_attachment(
+            jira, "RHAISTRAT-2044",
+            f"{STRATEGY_HEADING}\n\nOld attachment version.\n")
+        time.sleep(0.05)
+        _upload_strategy_attachment(
+            jira, "RHAISTRAT-2044",
+            f"{STRATEGY_HEADING}\n\nNewest attachment version.\n")
+
+        local_dir = tmp_path / "local"
+        result = _run(jira, "RHAISTRAT-2044", local_dir)
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+        content = (local_dir / "strat-tasks" / "RHAISTRAT-2044.md").read_text()
+        assert "Newest attachment version" in content
+        assert "Old attachment version" not in content
+
+    def test_selects_newest_review_attachment(self, jira, tmp_path):
+        jira.create("RHAISTRAT-2045", "Newest review attachment",
+                    f"{STRATEGY_HEADING}\n\nStrategy content.\n",
+                    labels=["strat-creator-rubric-pass"])
+        _upload_review_attachment(jira, "RHAISTRAT-2045", "Old review.\n")
+        time.sleep(0.05)
+        _upload_review_attachment(jira, "RHAISTRAT-2045", "Newest review.\n")
+
+        local_dir = tmp_path / "local"
+        result = _run(jira, "RHAISTRAT-2045", local_dir)
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+        review_path = local_dir / "strat-reviews" / "RHAISTRAT-2045-review.md"
+        assert review_path.read_text() == "Newest review.\n"
 
     def test_round_trip_push_pull(self, jira, tmp_path):
         """Push a large strategy (goes to attachment), pull it back,

@@ -1,8 +1,11 @@
 import os
 import sys
 
+import pytest
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
 
+import push_strategy
 from jira_utils import (
     BUSINESS_NEED_HEADING,
     RFE_REFERENCE_MARKER,
@@ -397,6 +400,19 @@ class TestFindStrategyAttachment:
         assert result is not None
         assert result["id"] == "200"
 
+    def test_selects_newest_matching_attachment(self):
+        attachments = [
+            {"filename": "RHAISTRAT-1000-strategy.md", "id": "10",
+             "created": "2026-08-24T11:00:00.000+0000",
+             "content": "https://jira/old"},
+            {"filename": "RHAISTRAT-1000-strategy.md", "id": "11",
+             "created": "2026-08-24T11:00:00.000+0000",
+             "content": "https://jira/new"},
+        ]
+        for ordered in (attachments, list(reversed(attachments))):
+            result = _find_strategy_attachment(ordered, "RHAISTRAT-1000")
+            assert result["id"] == "11"
+
     def test_returns_none_when_no_match(self):
         attachments = [
             {"filename": "RHAISTRAT-1000-review.md", "id": "100"},
@@ -414,6 +430,27 @@ class TestFindStrategyAttachment:
         ]
         result = _find_strategy_attachment(attachments, "RHAISTRAT-1000")
         assert result is None
+
+
+class TestAttachmentPush:
+
+    def test_marker_is_not_updated_when_upload_fails(self, monkeypatch):
+        description_updates = []
+
+        def fail_upload(*args, **kwargs):
+            raise RuntimeError("injected upload failure")
+
+        monkeypatch.setattr(push_strategy, "add_attachment", fail_upload)
+        monkeypatch.setattr(
+            push_strategy, "update_description",
+            lambda *args: description_updates.append(args))
+
+        with pytest.raises(RuntimeError, match="injected upload failure"):
+            push_strategy._push_via_attachment(
+                "https://jira", "user", "token", "RHAISTRAT-1000", "",
+                f"{STRATEGY_HEADING}\n\nStrategy.", None, [])
+
+        assert description_updates == []
 
 
 class TestExtractSourceRfe:

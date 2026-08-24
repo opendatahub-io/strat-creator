@@ -2,10 +2,13 @@
 import os
 import subprocess
 import sys
+import tempfile
+import threading
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
 
-from jira_utils import RFE_REFERENCE_MARKER, adf_to_markdown
+import push_strategy
+from jira_utils import RFE_REFERENCE_MARKER, add_attachment, adf_to_markdown
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 SCRIPT = os.path.join(PROJECT_ROOT, "scripts", "push_strategy.py")
@@ -39,6 +42,93 @@ def _get_description_markdown(jira, key):
     if desc is None:
         return ""
     return adf_to_markdown(desc).strip()
+
+
+def _upload_strategy_attachment(jira, strat_key, content):
+    """Upload a strategy attachment for an existing issue."""
+    with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".md", delete=False, encoding="utf-8") as f:
+        f.write(content)
+        tmp_path = f.name
+    try:
+        add_attachment(jira.url, "admin", "admin", strat_key, tmp_path,
+                       filename=f"{strat_key}-strategy.md")
+    finally:
+        os.unlink(tmp_path)
+
+
+class TestPushAttachmentConcurrency:
+
+    def test_overlapping_writers_are_serialized_per_issue(self, jira, monkeypatch):
+        issue_key = "RHAISTRAT-1015"
+        jira.create(issue_key, "Concurrent attachment push", "")
+        original_add_attachment = push_strategy.add_attachment
+        original_writer_lock = push_strategy._attachment_writer_lock
+        first_started = threading.Event()
+        second_lock_attempted = threading.Event()
+        release_first = threading.Event()
+        completed = []
+        errors = []
+        lock_attempts = 0
+        lock_attempts_guard = threading.Lock()
+
+        def instrumented_writer_lock(key):
+            nonlocal lock_attempts
+            with lock_attempts_guard:
+                lock_attempts += 1
+                if lock_attempts == 2:
+                    second_lock_attempted.set()
+            return original_writer_lock(key)
+
+        def blocking_add_attachment(server, user, token, key, path,
+                                    filename=None):
+            with open(path, encoding="utf-8") as strategy_file:
+                content = strategy_file.read()
+            if "First strategy" in content:
+                first_started.set()
+                assert release_first.wait(timeout=5)
+            return original_add_attachment(
+                server, user, token, key, path, filename=filename)
+
+        monkeypatch.setattr(
+            push_strategy, "add_attachment", blocking_add_attachment)
+        monkeypatch.setattr(
+            push_strategy, "_attachment_writer_lock", instrumented_writer_lock)
+
+        def run(strategy):
+            try:
+                push_strategy._push_via_attachment(
+                    jira.url, "admin", "admin", issue_key, "",
+                    f"{STRATEGY_HEADING}\n\n{strategy} strategy.", None, [])
+            except Exception as exc:  # pragma: no cover - asserted below
+                errors.append(exc)
+            else:
+                completed.append(strategy)
+
+        first = threading.Thread(target=run, args=("First",))
+        second = threading.Thread(target=run, args=("Second",))
+        first.start()
+        assert first_started.wait(timeout=5)
+        second.start()
+        assert second_lock_attempted.wait(timeout=5)
+
+        # The second writer overlaps the first, but cannot complete out of
+        # order while the first writer owns the per-issue lock.
+        assert completed == []
+        release_first.set()
+        first.join(timeout=10)
+        second.join(timeout=10)
+
+        assert not first.is_alive()
+        assert not second.is_alive()
+        assert errors == []
+        assert completed == ["First", "Second"]
+
+        issue = jira.get(issue_key)
+        attachments = issue["fields"].get("attachment", [])
+        assert len(attachments) == 2
+        assert "exceeds Jira's description size limit" in _get_description_markdown(
+            jira, issue_key)
 
 
 class TestPushNewStrategy:
@@ -119,6 +209,25 @@ class TestPushNewStrategy:
 
 
 class TestPushReplacement:
+
+    def test_keeps_attachment_when_strategy_shrinks(self, jira, art_dir):
+        jira.create("RHAISTRAT-1008", "Append-only attachment",
+                    f"## Business Need\n\nContext.\n\n{STRATEGY_HEADING}\n\n"
+                    "Current strategy in the description.")
+        _upload_strategy_attachment(
+            jira, "RHAISTRAT-1008",
+            f"{STRATEGY_HEADING}\n\nOld orphan attachment.\n")
+
+        local_file = art_dir / "artifacts" / "strat-tasks" / "RHAISTRAT-1008.md"
+        local_file.write_text(
+            f"{STRATEGY_HEADING}\n\nSmall strategy that fits.\n")
+        result = _run(jira, "RHAISTRAT-1008", local_file)
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+
+        issue = jira.get("RHAISTRAT-1008")
+        assert len(issue["fields"].get("attachment", [])) == 1
+        assert "Small strategy that fits" in _get_description_markdown(
+            jira, "RHAISTRAT-1008")
 
     def test_replaces_existing_strategy_section(self, jira, art_dir):
         existing_desc = (
