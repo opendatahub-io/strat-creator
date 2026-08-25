@@ -59,6 +59,22 @@ ATTACHMENT_NOTICE_NO_TLDR = (
 )
 
 
+def compute_synced_summary(current_summary, local_title):
+    """Return the new Jira summary to sync to, or None if already in sync.
+
+    `local_title` may itself carry the DRAFT_PREFIX (strategy frontmatter
+    keeps it there until sign-off strips it from Jira), so both sides are
+    compared and rebuilt on their bare (prefix-stripped) form to avoid
+    double-prefixing when the Jira summary already has it too.
+    """
+    had_draft_prefix = current_summary.startswith(DRAFT_PREFIX)
+    bare_current = current_summary[len(DRAFT_PREFIX):] if had_draft_prefix else current_summary
+    bare_local_title = local_title[len(DRAFT_PREFIX):] if local_title.startswith(DRAFT_PREFIX) else local_title
+    if bare_current == bare_local_title:
+        return None
+    return (DRAFT_PREFIX + bare_local_title) if had_draft_prefix else bare_local_title
+
+
 def extract_source_rfe(content):
     """Extract source_rfe from YAML frontmatter before metadata is stripped."""
     match = re.match(r'^---\s*\n(.*?)\n---', content, re.DOTALL)
@@ -311,10 +327,8 @@ def main():
           f"{args.issue_key}")
 
     if local_title:
-        had_draft_prefix = current_summary.startswith(DRAFT_PREFIX)
-        bare_current = current_summary[len(DRAFT_PREFIX):] if had_draft_prefix else current_summary
-        if bare_current != local_title:
-            new_summary = (DRAFT_PREFIX + local_title) if had_draft_prefix else local_title
+        new_summary = compute_synced_summary(current_summary, local_title)
+        if new_summary is not None:
             update_summary(server, user, token, args.issue_key, new_summary)
             print(f"  Summary updated to match refined title: {new_summary}")
 
