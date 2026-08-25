@@ -181,6 +181,21 @@ def jira(jira_emu):
 
 
 @pytest.fixture
+def description_limit(jira):
+    """Set the emulator's logical description limit for one test."""
+    from jira_emulator.config import get_settings
+
+    settings = get_settings()
+    original_limit = settings.DESCRIPTION_MAX_LENGTH
+
+    def set_limit(limit):
+        settings.DESCRIPTION_MAX_LENGTH = limit
+
+    yield set_limit
+    settings.DESCRIPTION_MAX_LENGTH = original_limit
+
+
+@pytest.fixture
 def art_dir(tmp_path):
     """Create artifact directory structure in a temp dir and chdir there."""
     for subdir in ("strat-tasks", "strat-reviews", "strat-originals"):

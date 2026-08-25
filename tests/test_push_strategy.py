@@ -1,4 +1,5 @@
 import os
+import stat
 import sys
 
 import pytest
@@ -17,6 +18,7 @@ from push_strategy import (
     STAFF_INPUT_HEADING,
     STRATEGY_HEADING,
     _build_description_stub,
+    _ensure_private_directory,
     _find_strategy_attachment,
     extract_source_rfe,
     extract_staff_input_section,
@@ -451,6 +453,24 @@ class TestAttachmentPush:
                 f"{STRATEGY_HEADING}\n\nStrategy.", None, [])
 
         assert description_updates == []
+
+
+class TestAttachmentLockDirectory:
+
+    def test_tightens_permissive_owned_directory(self, tmp_path):
+        lock_dir = tmp_path / "cache"
+        lock_dir.mkdir(mode=0o755)
+
+        _ensure_private_directory(str(lock_dir), create=True)
+
+        assert stat.S_IMODE(lock_dir.stat().st_mode) == 0o700
+
+    def test_rejects_permissive_external_directory(self, tmp_path):
+        runtime_dir = tmp_path / "runtime"
+        runtime_dir.mkdir(mode=0o755)
+
+        with pytest.raises(RuntimeError, match="not private"):
+            _ensure_private_directory(str(runtime_dir), create=False)
 
 
 class TestExtractSourceRfe:

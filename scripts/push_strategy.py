@@ -87,7 +87,12 @@ def _ensure_private_directory(path, *, create):
     except FileNotFoundError:
         if not create:
             raise RuntimeError(f"Lock directory does not exist: {path}")
-        os.mkdir(path, 0o700)
+        try:
+            os.mkdir(path, 0o700)
+        except FileExistsError:
+            # Another writer may have created the directory between lstat and
+            # mkdir; validate the resulting path below.
+            pass
         info = os.lstat(path)
 
     if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
@@ -96,21 +101,57 @@ def _ensure_private_directory(path, *, create):
     if getuid is not None and info.st_uid != getuid():
         raise RuntimeError(f"Lock directory is not user-owned: {path}")
     if stat.S_IMODE(info.st_mode) & 0o077:
-        raise RuntimeError(f"Lock directory is not private: {path}")
+        if not create:
+            raise RuntimeError(f"Lock directory is not private: {path}")
+
+        # The cache directory may be created by a base image with permissive
+        # mode bits. Tighten only directories we own and are managing. Open
+        # the directory without following symlinks, then chmod the descriptor
+        # to avoid changing a raced replacement target.
+        flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+        flags |= getattr(os, "O_NOFOLLOW", 0)
+        directory_fd = os.open(path, flags)
+        try:
+            current = os.fstat(directory_fd)
+            if (current.st_dev, current.st_ino) != (info.st_dev, info.st_ino):
+                raise RuntimeError(f"Lock directory changed during validation: {path}")
+            if not stat.S_ISDIR(current.st_mode):
+                raise RuntimeError(f"Lock path is not a directory: {path}")
+            if getuid is not None and current.st_uid != getuid():
+                raise RuntimeError(f"Lock directory is not user-owned: {path}")
+            os.fchmod(directory_fd, 0o700)
+            info = os.fstat(directory_fd)
+        finally:
+            os.close(directory_fd)
+        if stat.S_IMODE(info.st_mode) & 0o077:
+            raise RuntimeError(f"Lock directory is not private: {path}")
+
+
+def _cache_attachment_lock_directory():
+    """Return a private, user-owned cache directory for lock files."""
+    cache_dir = os.path.join(os.path.expanduser("~"), ".cache")
+    _ensure_private_directory(cache_dir, create=True)
+    lock_dir = os.path.join(cache_dir, "strat-creator-locks")
+    _ensure_private_directory(lock_dir, create=True)
+    return lock_dir
 
 
 def _attachment_lock_directory():
     """Return a private, user-owned runtime/cache directory for lock files."""
     runtime_dir = os.environ.get("XDG_RUNTIME_DIR")
     if runtime_dir:
+        # Keep security failures hard: an untrusted runtime directory must not
+        # be bypassed silently. A secure runtime directory can still be
+        # unavailable in a restricted container, so fall back to the private
+        # user cache when creating our child fails operationally.
         _ensure_private_directory(runtime_dir, create=False)
         lock_dir = os.path.join(runtime_dir, "strat-creator-locks")
-    else:
-        cache_dir = os.path.join(os.path.expanduser("~"), ".cache")
-        _ensure_private_directory(cache_dir, create=True)
-        lock_dir = os.path.join(cache_dir, "strat-creator-locks")
-    _ensure_private_directory(lock_dir, create=True)
-    return lock_dir
+        try:
+            _ensure_private_directory(lock_dir, create=True)
+            return lock_dir
+        except OSError:
+            pass
+    return _cache_attachment_lock_directory()
 
 
 def _open_attachment_lock(lock_path):
