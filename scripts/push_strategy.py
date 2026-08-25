@@ -15,19 +15,23 @@ Environment variables:
 """
 
 import argparse
+import fcntl
 import json
 import os
 import re
+import stat
 import sys
 import tempfile
+import threading
 import urllib.error
+from contextlib import contextmanager
 
 from jira_utils import (
     add_attachment,
     adf_to_markdown,
     api_call_with_retry,
+    attachment_sort_key,
     build_rfe_reference,
-    delete_attachment,
     get_issue,
     markdown_to_adf,
     require_env,
@@ -57,6 +61,143 @@ ATTACHMENT_NOTICE_NO_TLDR = (
     "> **Note:** The full strategy exceeds Jira's description size limit "
     "and is stored as an attachment: `{filename}`."
 )
+
+_attachment_writer_locks = {}
+_attachment_writer_locks_guard = threading.Lock()
+
+
+def _reject_symlink_components(path):
+    """Reject symlinked components in a lock path before opening it."""
+    current = os.path.sep
+    for component in os.path.abspath(path).split(os.path.sep):
+        if not component:
+            continue
+        current = os.path.join(current, component)
+        try:
+            mode = os.lstat(current).st_mode
+        except FileNotFoundError:
+            continue
+        if stat.S_ISLNK(mode):
+            raise RuntimeError(
+                f"Refusing symlinked lock path component: {current}")
+
+
+def _ensure_private_directory(path, *, create):
+    """Validate a user-owned directory with no group/world access."""
+    _reject_symlink_components(path)
+    try:
+        info = os.lstat(path)
+    except FileNotFoundError:
+        if not create:
+            raise RuntimeError(f"Lock directory does not exist: {path}")
+        try:
+            os.mkdir(path, 0o700)
+        except FileExistsError:
+            # Another writer may have created the directory between lstat and
+            # mkdir; validate the resulting path below.
+            pass
+        info = os.lstat(path)
+
+    if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
+        raise RuntimeError(f"Lock path is not a directory: {path}")
+    getuid = getattr(os, "getuid", None)
+    if getuid is not None and info.st_uid != getuid():
+        raise RuntimeError(f"Lock directory is not user-owned: {path}")
+    if stat.S_IMODE(info.st_mode) & 0o077:
+        if not create:
+            raise RuntimeError(f"Lock directory is not private: {path}")
+
+        # The cache directory may be created by a base image with permissive
+        # mode bits. Tighten only directories we own and are managing. Open
+        # the directory without following symlinks, then chmod the descriptor
+        # to avoid changing a raced replacement target.
+        flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+        flags |= getattr(os, "O_NOFOLLOW", 0)
+        directory_fd = os.open(path, flags)
+        try:
+            current = os.fstat(directory_fd)
+            if (current.st_dev, current.st_ino) != (info.st_dev, info.st_ino):
+                raise RuntimeError(f"Lock directory changed during validation: {path}")
+            if not stat.S_ISDIR(current.st_mode):
+                raise RuntimeError(f"Lock path is not a directory: {path}")
+            if getuid is not None and current.st_uid != getuid():
+                raise RuntimeError(f"Lock directory is not user-owned: {path}")
+            os.fchmod(directory_fd, 0o700)
+            info = os.fstat(directory_fd)
+        finally:
+            os.close(directory_fd)
+        if stat.S_IMODE(info.st_mode) & 0o077:
+            raise RuntimeError(f"Lock directory is not private: {path}")
+
+
+def _cache_attachment_lock_directory():
+    """Return a private, user-owned cache directory for lock files."""
+    cache_dir = os.path.join(os.path.expanduser("~"), ".cache")
+    _ensure_private_directory(cache_dir, create=True)
+    lock_dir = os.path.join(cache_dir, "strat-creator-locks")
+    _ensure_private_directory(lock_dir, create=True)
+    return lock_dir
+
+
+def _attachment_lock_directory():
+    """Return a private, user-owned runtime/cache directory for lock files."""
+    runtime_dir = os.environ.get("XDG_RUNTIME_DIR")
+    if runtime_dir:
+        # Keep security failures hard: an untrusted runtime directory must not
+        # be bypassed silently. A secure runtime directory can still be
+        # unavailable in a restricted container, so fall back to the private
+        # user cache when creating our child fails operationally.
+        _ensure_private_directory(runtime_dir, create=False)
+        lock_dir = os.path.join(runtime_dir, "strat-creator-locks")
+        try:
+            _ensure_private_directory(lock_dir, create=True)
+            return lock_dir
+        except OSError:
+            pass
+    return _cache_attachment_lock_directory()
+
+
+def _open_attachment_lock(lock_path):
+    """Open a lock file without following or truncating symlinks."""
+    flags = os.O_RDWR | os.O_CREAT
+    nofollow = getattr(os, "O_NOFOLLOW", 0)
+    if nofollow:
+        flags |= nofollow
+    else:
+        _reject_symlink_components(lock_path)
+    fd = os.open(lock_path, flags, 0o600)
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode):
+            raise RuntimeError(f"Lock path is not a regular file: {lock_path}")
+        getuid = getattr(os, "getuid", None)
+        if getuid is not None and info.st_uid != getuid():
+            raise RuntimeError(f"Lock file is not user-owned: {lock_path}")
+        if stat.S_IMODE(info.st_mode) & 0o077:
+            raise RuntimeError(f"Lock file is not private: {lock_path}")
+        return os.fdopen(fd, "a+", encoding="utf-8")
+    except Exception:
+        os.close(fd)
+        raise
+
+
+@contextmanager
+def _attachment_writer_lock(issue_key):
+    """Serialize attachment writes for an issue across local processes."""
+    with _attachment_writer_locks_guard:
+        thread_lock = _attachment_writer_locks.setdefault(
+            issue_key, threading.Lock())
+
+    lock_dir = _attachment_lock_directory()
+    safe_issue_key = re.sub(r"[^A-Za-z0-9_.-]", "_", issue_key)
+    lock_path = os.path.join(lock_dir, f"{safe_issue_key}.lock")
+
+    with thread_lock, _open_attachment_lock(lock_path) as lock_file:
+        fcntl.flock(lock_file, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(lock_file, fcntl.LOCK_UN)
 
 
 def compute_synced_summary(current_summary, local_title):
@@ -184,12 +325,12 @@ def update_description(server, user, token, issue_key, description_adf):
 
 
 def _find_strategy_attachment(attachments, issue_key):
-    """Find an existing strategy attachment by naming convention."""
+    """Find the newest strategy attachment by naming convention."""
     filename = STRATEGY_ATTACHMENT_TEMPLATE.format(issue_key=issue_key)
-    for att in attachments:
-        if att.get("filename") == filename:
-            return att
-    return None
+    candidates = [att for att in attachments
+                  if att.get("filename") == filename]
+    return (max(candidates, key=attachment_sort_key)
+            if candidates else None)
 
 
 def _push_via_attachment(server, user, token, issue_key, existing_md,
@@ -197,31 +338,21 @@ def _push_via_attachment(server, user, token, issue_key, existing_md,
     """Push strategy as attachment + stub description."""
     att_filename = STRATEGY_ATTACHMENT_TEMPLATE.format(issue_key=issue_key)
 
-    stub_md = _build_description_stub(
-        existing_md, strategy_section, staff_input_section, att_filename)
-    stub_adf = markdown_to_adf(stub_md)
-    update_description(server, user, token, issue_key, stub_adf)
+    with _attachment_writer_lock(issue_key):
+        stub_md = _build_description_stub(
+            existing_md, strategy_section, staff_input_section, att_filename)
+        stub_adf = markdown_to_adf(stub_md)
 
-    with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".md", delete=False, encoding="utf-8") as tmp:
-        tmp.write(strategy_section + "\n")
-        tmp_path = tmp.name
-    try:
-        old_att = _find_strategy_attachment(attachments, issue_key)
-        if old_att:
-            try:
-                delete_attachment(server, user, token, old_att["id"])
-            except urllib.error.HTTPError as e:
-                if e.code in (403, 404):
-                    print(f"  WARNING: Could not delete old attachment "
-                          f"(HTTP {e.code}). Uploading new copy.",
-                          file=sys.stderr)
-                else:
-                    raise
-        add_attachment(server, user, token, issue_key,
-                       tmp_path, filename=att_filename)
-    finally:
-        os.unlink(tmp_path)
+        with tempfile.NamedTemporaryFile(
+                mode="w", suffix=".md", delete=False, encoding="utf-8") as tmp:
+            tmp.write(strategy_section + "\n")
+            tmp_path = tmp.name
+        try:
+            add_attachment(server, user, token, issue_key,
+                           tmp_path, filename=att_filename)
+            update_description(server, user, token, issue_key, stub_adf)
+        finally:
+            os.unlink(tmp_path)
 
     print(f"OK: Strategy pushed to {issue_key} as attachment {att_filename}")
 
@@ -315,13 +446,6 @@ def main():
                                      staff_input_section, attachments)
                 return
         raise
-
-    # Clean up orphan attachment if strategy now fits in description
-    old_att = _find_strategy_attachment(attachments, args.issue_key)
-    if old_att:
-        delete_attachment(server, user, token, old_att["id"])
-        print("  Removed previous strategy attachment "
-              "(content now fits in description)", file=sys.stderr)
 
     print(f"OK: Strategy and Staff Engineer / SME Input pushed to "
           f"{args.issue_key}")
