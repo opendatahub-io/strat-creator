@@ -477,7 +477,7 @@ wheels = [
 [[package]]
 name = "jira-emulator"
 version = "0.1.0"
-source = { git = "https://github.com/jctanner/jira-emulator.git#77cc9ac8f69edaedb905db6b2f08015f964a4744" }
+source = { git = "https://github.com/jctanner/jira-emulator.git#5d99b137b17b14d8a617a4d2773951121816c1bd" }
 dependencies = [
     { name = "aiosqlite" },
     { name = "bcrypt" },
