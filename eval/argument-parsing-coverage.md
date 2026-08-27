@@ -1,6 +1,6 @@
 # Coverage: `/strategy-refine` argument-parsing refusal (RHAIFIRST-399)
 
-Status: **proposed** — judges below are not yet in `eval.yaml`. Verify the
+Status: **proposed** — judges below are not yet in `strat-refine.yaml`. Verify the
 `steps/refine/stdout.log` path with a throwaway single-case run before relying on
 the refusal-diagnosis branch (see [Verify first](#verify-first)).
 
@@ -66,7 +66,7 @@ The refine refusal is a top-level assistant turn in the **refine** step, saved a
 
 ## Proposed judges
 
-Add to the `judges:` list in `eval.yaml`:
+Add to the `judges:` list in `strat-refine.yaml`:
 
 ```yaml
   # --- Argument recognition (RHAIFIRST-399). strategy-refine must ACT on its
@@ -177,7 +177,7 @@ Before trusting the refusal-diagnosis branch, confirm the per-step log lands whe
 the judge expects:
 
 ```bash
-/eval-run --config eval/eval.yaml --model claude-opus-4-6 \
+/eval-run --config eval/strat-refine.yaml --model claude-opus-4-6 \
   --cases <one-small-case-id>
 ls eval/runs/*/cases/*/steps/refine/stdout.log   # should exist
 ```

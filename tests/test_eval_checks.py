@@ -1,4 +1,4 @@
-"""Unit tests for the inline `check:` judges in eval/eval.yaml.
+"""Unit tests for the inline `check:` judges in eval/strat-refine.yaml.
 
 These run the check source straight out of the config, so they fail if the YAML
 drifts from what they assert.
@@ -10,7 +10,7 @@ import pytest
 import yaml
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-EVAL_YAML = os.path.join(PROJECT_ROOT, "eval", "eval.yaml")
+EVAL_YAML = os.path.join(PROJECT_ROOT, "eval", "strat-refine.yaml")
 
 SESSION = "11111111-2222-3333-4444-555555555555"
 OTHER_SESSION = "99999999-8888-7777-6666-555555555555"
