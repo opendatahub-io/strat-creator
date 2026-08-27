@@ -20,11 +20,11 @@ The assess-strat scripts are maintained in this repository under
 
 ### Rules
 
-- **No shell pipes or compound commands.** Run all scripts as simple commands (e.g., `python3 scripts/assess-strat/setup_run.py /path/to/strategies`). Do not use `|`, `&&`, `;`, `2>/dev/null`, or redirects. The Bash tool returns command output as a string — parse it programmatically in your logic, not with `sed`/`awk`/`wc`/`grep` pipelines.
+- **No shell pipes or compound commands.** Run all scripts as simple commands (e.g., `python3 scripts/assess-strat/setup_run.py /path/to/strategies`). Do not use `|`, `&&`, `;`, `2>/dev/null`, or redirects. The Bash tool returns command output as a string -- parse it programmatically in your logic, not with `sed`/`awk`/`wc`/`grep` pipelines.
 
 ### Architecture
 
-Single-input mode scores one strategy from a file path. Batch mode scores all strategies in a directory. Results are saved as individual files in a timestamped run directory. Strategies are local markdown files — no Jira fetch needed.
+Single-input mode scores one strategy from a file path. Batch mode scores all strategies in a directory. Results are saved as individual files in a timestamped run directory. Strategies are local markdown files -- no Jira fetch needed.
 
 #### Directory Structure
 
@@ -59,30 +59,30 @@ Then assess:
 
 **Phase 0: Preflight checks.**
 - Run `python3 scripts/assess-strat/preflight.py {STRAT_DIR}` to check strategy directory and current run state. Parse the output:
-  - `STRAT_DIR_EXISTS=true/false` — if false, ask the user for the correct path
-  - `STRAT_COUNT=N` — number of strategy files found
-  - `CURRENT_RUN=path/none`, `CURRENT_ASSESSED=N`, `CURRENT_COMPLETE=true/false` — existing run state
+  - `STRAT_DIR_EXISTS=true/false` -- if false, ask the user for the correct path
+  - `STRAT_COUNT=N` -- number of strategy files found
+  - `CURRENT_RUN=path/none`, `CURRENT_ASSESSED=N`, `CURRENT_COMPLETE=true/false` -- existing run state
   - If there is an incomplete current run (`CURRENT_COMPLETE=false`), inform the user it will be resumed.
 
 **Phase 1: Set up run directory.**
 - Run `python3 scripts/assess-strat/setup_run.py {STRAT_DIR}` (add `--limit N` if the user requested a subset).
 - The script handles all resume logic and outputs:
-  - `RUN_DIR=<path>` — the absolute path to use for this run
-  - `STRAT_DIR=<path>` — absolute path to source strategies
-  - `PENDING=<count>` — number of strategies to assess
-  - `QUEUE_FILE=<path>` — path to the queue file
-- Parse the output to get `{RUN_DIR}`, `{STRAT_DIR}`, and `{PENDING}` count. **Do NOT try to memorize or generate the key list yourself** — the queue file is the single source of truth for which keys to process.
+  - `RUN_DIR=<path>` -- the absolute path to use for this run
+  - `STRAT_DIR=<path>` -- absolute path to source strategies
+  - `PENDING=<count>` -- number of strategies to assess
+  - `QUEUE_FILE=<path>` -- path to the queue file
+- Parse the output to get `{RUN_DIR}`, `{STRAT_DIR}`, and `{PENDING}` count. **Do NOT try to memorize or generate the key list yourself** -- the queue file is the single source of truth for which keys to process.
 
 **Phase 2: Assess with a pipeline of 30 concurrent agents.**
-- Use `scripts/assess-strat/next_batch.py` to get keys from the queue. **Never generate key sequences yourself** — always get keys from the script.
+- Use `scripts/assess-strat/next_batch.py` to get keys from the queue. **Never generate key sequences yourself** -- always get keys from the script.
 - **Launch loop:** Repeat until `BATCH_SIZE=0` (queue empty):
   1. Run `python3 scripts/assess-strat/next_batch.py {RUN_DIR} --batch-size 30` to pop the next batch of keys. Parse the output:
-     - `BATCH_SIZE=N` — number of keys in this batch (0 = queue exhausted)
-     - `REMAINING=N` — keys still in queue after this batch
+     - `BATCH_SIZE=N` -- number of keys in this batch (0 = queue exhausted)
+     - `REMAINING=N` -- keys still in queue after this batch
      - Keys listed after the `---` separator
   2. Launch one agent per key (model: opus, run_in_background: true, subagent_type: strat-scorer) with the launch prompt below.
   3. Wait for agents to complete (poll every 30 seconds), then loop back to step 1 to pop the next batch.
-- **Active polling:** Poll running agents every 30 seconds. Do not passively wait for completion notifications — they can be missed.
+- **Active polling:** Poll running agents every 30 seconds. Do not passively wait for completion notifications -- they can be missed.
 - **Progress checking:** Run `python3 scripts/assess-strat/check_progress.py {RUN_DIR}` to get `COMPLETED=N`, `TOTAL=N`, `REMAINING=N`.
 
 **Phase 3: Generate CSV and present results.**
@@ -103,25 +103,25 @@ Run directory: {RUN_DIR}
 ```
 
 Placeholders:
-- `{PROMPT_PATH}` → absolute path of `scripts/assess-strat/agent_prompt.md`
-- `{DATA_FILE}` → for batch: `{STRAT_DIR}/{KEY}.md`, for single: the resolved file path
-- `{KEY}` and `{RUN_DIR}` → actual values
+- `{PROMPT_PATH}` -> absolute path of `scripts/assess-strat/agent_prompt.md`
+- `{DATA_FILE}` -> for batch: `{STRAT_DIR}/{KEY}.md`, for single: the resolved file path
+- `{KEY}` and `{RUN_DIR}` -> actual values
 
 This ensures every agent reads the identical rubric from the single source of truth.
 
 ### Coordinator Output Format
 
-Single strategy — wrap agent output with a header:
+Single strategy -- wrap agent output with a header:
 ```
 ## Strategy Assessment: RHAISTRAT-1469
 [agent output]
 ```
 
-Batch — after Phase 3, present the summary analysis from the CSV to the user. Include:
+Batch -- after Phase 3, present the summary analysis from the CSV to the user. Include:
 - Total assessed, verdict distribution (approve/revise/split/reject)
 - Score distribution
 - Criteria averages and zero-score counts
-- What-if analysis (e.g., "if Testability 0→1, N more would approve")
+- What-if analysis (e.g., "if Testability 0->1, N more would approve")
 - Near-miss strategies (close to approval)
 
 ### Scripts Reference
@@ -130,7 +130,7 @@ Batch — after Phase 3, present the summary analysis from the CSV to the user. 
 |--------|---------|
 | `preflight.py` | Checks strategy directory and current run status |
 | `setup_run.py` | Creates timestamped run directory with resume support |
-| `agent_prompt.md` | Full scoring rubric and instructions for assessment agents — use verbatim |
+| `agent_prompt.md` | Full scoring rubric and instructions for assessment agents -- use verbatim |
 | `next_batch.py` | Pops the next N keys from the queue file; ensures each key is processed exactly once |
 | `check_progress.py` | Reports completed vs total strategies for a run directory |
 | `parse_results.py` | Extracts scores from `.result.md` files into `scores.csv` with verdicts |
