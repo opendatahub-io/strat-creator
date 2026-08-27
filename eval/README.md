@@ -113,11 +113,11 @@ curated RFE key list lives in `eval/scripts/build_dataset.py` (`CURATED`).
 
 ```bash
 # Cheap smoke test first — one small (S) case; --cases takes EXACT case IDs (space-separated)
-/eval-run --config eval/eval.yaml --model claude-opus-4-6 \
+/eval-run --config eval/strat-refine.yaml --model claude-opus-4-6 \
   --cases RHAIRFE-912-configuration-persistence-for-gen-ai-studio
 
 # Full run against the prod model (all 24 cases)
-/eval-run --config eval/eval.yaml --model claude-opus-4-6
+/eval-run --config eval/strat-refine.yaml --model claude-opus-4-6
 ```
 
 Each run writes `eval/runs/<run-id>/` with `summary.yaml`, `report.html`,
@@ -145,10 +145,10 @@ architecture agent judge (`samples: 3`), so the full 24-case run is substantial
 
 ## Model comparison (Phase 2)
 
-Uncomment the `matrix:` block in `eval/eval.yaml` and run:
+Uncomment the `matrix:` block in `eval/strat-refine.yaml` and run:
 
 ```bash
-/eval-anova --config eval/eval.yaml       # sweeps the model factor with replications
+/eval-anova --config eval/strat-refine.yaml       # sweeps the model factor with replications
 /eval-compare eval/runs                   # side-by-side model comparison report
 ```
 
@@ -162,9 +162,9 @@ all cells. Add `--baseline <run-id>` to activate the blind `pairwise` judge
 
 ```text
 eval/
-  eval.yaml                 # harness config (claude-code runner, execution.steps, hooks, judges, matrix[commented])
+  strat-refine.yaml                 # harness config (claude-code runner, execution.steps, hooks, judges, matrix[commented])
   prompts/*.md              # rubric judges + pairwise. Architecture has TWO prompts:
-                            #   architecture-agent-judge.md  ACTIVE  (grounded agent judge, wired in eval.yaml)
+                            #   architecture-agent-judge.md  ACTIVE  (grounded agent judge, wired in strat-refine.yaml)
                             #   architecture-judge.md        legacy  (text-only, inflates to ~2.0; kept for the cheap variant)
   scripts/build_dataset.py  # materializes dataset/cases from strat-pipeline-data
   scripts/stage-assets.sh   # before_all hook: stages assess-strat + architecture-context into .assets/

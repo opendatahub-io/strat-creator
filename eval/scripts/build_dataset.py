@@ -17,7 +17,7 @@ faithfully reproducing the production create->refine->review handoff without any
 live Jira (create is mechanical; the LLM-driven, quality-determining stages are
 refine + review).
 
-Output layout (one dir per case), consumed by eval/eval.yaml (execution.steps):
+Output layout (one dir per case), consumed by eval/strat-refine.yaml (execution.steps):
   eval/dataset/cases/<case-id>/
     input.yaml            — rfe_key, strat_id, title, priority, size (drives the driver + judges)
     stub.md               — strategy-create output (refine's input); staged to artifacts/strat-tasks/<strat_id>.md
@@ -187,7 +187,7 @@ def build_case(rfe_key, tri, out_root, force):
     write(os.path.join(case_dir, "rfe-original.md"), rfe_body + "\n")
 
     # 2) rfe-comments.md — removed-implementation-context (refine Source 1 fallback).
-    #    Always written (even if empty) so the eval.yaml workspace whitelist is stable.
+    #    Always written (even if empty) so the strat-refine.yaml workspace whitelist is stable.
     if tri["comments"]:
         write(os.path.join(case_dir, "rfe-comments.md"), read(tri["comments"]))
     else:
