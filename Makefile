@@ -16,7 +16,8 @@ test-unit:          ## Run unit tests only
 	       tests/test_dashboard_metrics.py \
 	       tests/test_render_html.py \
 	       tests/test_eval_checks.py \
-	       tests/test_skill_integrity.py -v --tb=short
+	       tests/test_skill_integrity.py \
+	       tests/assess_strat -v --tb=short
 
 test-integration:   ## Run integration tests (jira-emulator)
 	uv run pytest tests/test_clone_issue.py tests/test_push_strategy_integration.py \

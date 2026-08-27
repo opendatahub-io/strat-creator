@@ -65,19 +65,18 @@ Otherwise, fetch from remote:
 bash ${CLAUDE_SKILL_DIR}/scripts/fetch-architecture-context.sh
 ```
 
-## Step 3: Bootstrap assess-strat
+## Step 3: Use the in-repository assess-strat implementation
 
-```bash
-bash ${CLAUDE_SKILL_DIR}/scripts/bootstrap-assess-strat.sh
-```
-
-This clones the assess-strat plugin into `.context/assess-strat/`, copies skills and agent definitions, and exports the rubric to `artifacts/strat-rubric.md`.
+The scorer agent, rubric, skills, scripts, and tests are versioned in this
+repository. The scorer agent is registered from `.claude/agents/strat-scorer.md`
+and the scoring scripts live under `scripts/assess-strat/`. No bootstrap or
+runtime clone is required.
 
 ## Step 4: Score Strategy
 
-Launch a strat-scorer agent to produce numeric scores for the strategy. The assess-strat plugin provides the rubric and agent definition.
-
-Resolve the plugin root: the bootstrap script clones it to `.context/assess-strat/`. Use this path as `{PLUGIN_ROOT}`.
+Launch a strat-scorer agent to produce numeric scores for the strategy. The
+in-repository assess-strat implementation provides the rubric and agent
+definition.
 
 Create a clean run directory (removes stale result files from prior reviews in the same CI job):
 
@@ -86,7 +85,7 @@ rm -rf /tmp/strat-assess/review
 mkdir -p /tmp/strat-assess/review
 ```
 
-Spawn one agent (model: opus, run_in_background: true, subagent_type: assess-strat:strat-scorer) with this prompt:
+Spawn one agent (model: opus, run_in_background: true, subagent_type: strat-scorer) with this prompt:
 
 ```
 You are a strategy quality assessor. Your task:
@@ -99,7 +98,7 @@ Run directory: {RUN_DIR}
 ```
 
 Substitute all placeholders:
-- `{PROMPT_PATH}` → absolute path of `{PLUGIN_ROOT}/scripts/agent_prompt.md`
+- `{PROMPT_PATH}` → absolute path of `scripts/assess-strat/agent_prompt.md`
 - `{DATA_FILE}` → the strategy file path (e.g., `artifacts/strat-tasks/RHAISTRAT-1469.md`)
 - `{KEY}` → the strategy key (e.g., `RHAISTRAT-1469`)
 - `{RUN_DIR}` → `/tmp/strat-assess/review`
@@ -112,7 +111,7 @@ After the scorer agent has completed, run the scoring scripts to deterministical
 
 ```bash
 # Parse .result.md files → scores.csv with deterministic verdicts
-python3 .context/assess-strat/scripts/parse_results.py /tmp/strat-assess/review/
+python3 scripts/assess-strat/parse_results.py /tmp/strat-assess/review/
 
 # Apply scores and verdicts to review file frontmatter
 python3 ${CLAUDE_SKILL_DIR}/scripts/apply_scores.py /tmp/strat-assess/review/scores.csv \
@@ -120,7 +119,7 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/apply_scores.py /tmp/strat-assess/review/sco
     --result-dir /tmp/strat-assess/review
 
 # Print summary statistics
-python3 .context/assess-strat/scripts/summarize_run.py /tmp/strat-assess/review/
+python3 scripts/assess-strat/summarize_run.py /tmp/strat-assess/review/
 ```
 
 **Do NOT manually extract scores, compute verdicts, or set frontmatter.** The scripts handle this deterministically. The verdict rules are:
