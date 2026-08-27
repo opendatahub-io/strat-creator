@@ -18,7 +18,9 @@ Output (stdout):
 """
 
 import argparse
+import fcntl
 import os
+import tempfile
 
 
 def main():
@@ -31,22 +33,40 @@ def main():
 
     queue_file = os.path.join(args.run_dir, "queue.txt")
 
-    if not os.path.exists(queue_file):
-        print("BATCH_SIZE=0")
-        print("REMAINING=0")
-        print("---")
-        return
+    # Lock a separate file so the lock survives os.replace(queue_file). The
+    # read, dequeue, and atomic rewrite must be one operation or concurrent
+    # workers can receive the same key batch.
+    lock_file = f"{queue_file}.lock"
+    with open(lock_file, "a+", encoding="utf-8") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        try:
+            if not os.path.exists(queue_file):
+                batch = []
+                remaining = []
+            else:
+                with open(queue_file, "r", encoding="utf-8") as f:
+                    keys = [line.strip() for line in f if line.strip()]
+                batch = keys[:args.batch_size]
+                remaining = keys[args.batch_size:]
 
-    with open(queue_file, "r", encoding="utf-8") as f:
-        keys = [line.strip() for line in f if line.strip()]
-
-    batch = keys[:args.batch_size]
-    remaining = keys[args.batch_size:]
-
-    # Rewrite queue with remaining keys
-    with open(queue_file, "w", encoding="utf-8") as f:
-        for key in remaining:
-            f.write(key + "\n")
+                # Write alongside the queue, then atomically publish the new
+                # queue while the lock is still held.
+                temp_path = None
+                try:
+                    with tempfile.NamedTemporaryFile(
+                        "w", encoding="utf-8", dir=args.run_dir,
+                        prefix=".queue.", delete=False,
+                    ) as temp:
+                        temp_path = temp.name
+                        for key in remaining:
+                            temp.write(key + "\n")
+                    os.replace(temp_path, queue_file)
+                    temp_path = None
+                finally:
+                    if temp_path and os.path.exists(temp_path):
+                        os.unlink(temp_path)
+        finally:
+            fcntl.flock(lock, fcntl.LOCK_UN)
 
     print(f"BATCH_SIZE={len(batch)}")
     print(f"REMAINING={len(remaining)}")

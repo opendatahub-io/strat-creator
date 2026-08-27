@@ -81,14 +81,17 @@ def extract_scores(text):
         criterion_cell = parts[1]
         score_cell = parts[2]
 
-        # Extract score: N/2 or bare digit
-        score_m = re.search(r"(\d)\s*/\s*2", score_cell)
+        # Extract score: N/2 or bare integer. Capture the complete numeric
+        # value so a malformed 10/2 cannot silently become 1/2.
+        score_m = re.search(r"(\d+)\s*/\s*2", score_cell)
         if not score_m:
-            score_m = re.match(r"^\s*(\d)\s*$", score_cell)
+            score_m = re.match(r"^\s*(\d+)\s*$", score_cell)
         score = int(score_m.group(1)) if score_m else None
 
         if score is None:
             continue
+        if score not in (0, 1, 2):
+            return None
 
         # Clean criterion for matching
         crit = re.sub(r"[*_()\d/\-]", " ", criterion_cell).strip().lower()
@@ -122,6 +125,12 @@ def extract_title(text):
     if m:
         return m.group(1).strip().strip("*").strip()
     return ""
+
+
+def sanitize_csv_value(value):
+    """Prevent spreadsheet software from evaluating exported cells as formulas."""
+    value = str(value)
+    return f"'{value}" if value.startswith(("=", "+", "-", "@")) else value
 
 
 def main():
@@ -173,12 +182,17 @@ def main():
             **scores,
         })
 
-    # Write CSV
+    # Write CSV. Escape every field rather than just untrusted titles: IDs and
+    # future score-derived string values are also imported by spreadsheet apps.
     fieldnames = ["ID", "Title"] + CRITERIA + ["Total", "Verdict", "Needs_Attention"]
+    csv_rows = [
+        {field: sanitize_csv_value(row.get(field, "")) for field in fieldnames}
+        for row in rows
+    ]
     with open(output_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
-        writer.writerows(rows)
+        writer.writerows(csv_rows)
 
     # Summary
     approved = sum(1 for r in rows if r["Verdict"] == "APPROVE")

@@ -53,7 +53,8 @@ def summarize(rows):
 
     verdicts = Counter(r["Verdict"] for r in assessed)
     n_approve = verdicts.get("APPROVE", 0)
-    n_revise = verdicts.get("REVISE", 0) + verdicts.get("SPLIT", 0)
+    n_revise = verdicts.get("REVISE", 0)
+    n_split = verdicts.get("SPLIT", 0)
     n_reject = verdicts.get("REJECT", 0)
     approve_rate = n_approve / na * 100 if na > 0 else 0
 
@@ -97,10 +98,11 @@ def summarize(rows):
     print(f"- **Total assessed:** {na}")
     print(f"- **Approve:** {n_approve} ({approve_rate:.1f}%)")
     print(f"- **Revise:** {n_revise}")
+    print(f"- **Split:** {n_split}")
     print(f"- **Reject:** {n_reject}")
     if ne > 0:
         print(f"- **Errors (data not found):** {ne}")
-    print(f"- **Needs attention:** {n_revise + n_reject}")
+    print(f"- **Needs attention:** {n_revise + n_split + n_reject}")
     print()
 
     print("### Score Distribution")
@@ -118,7 +120,7 @@ def summarize(rows):
     print()
     print("| Verdict | Count | % |")
     print("|---------|-------|---|")
-    for v in ["APPROVE", "REVISE", "REJECT"]:
+    for v in ["APPROVE", "REVISE", "SPLIT", "REJECT"]:
         count = verdicts.get(v, 0)
         pct = count / na * 100 if na > 0 else 0
         print(f"| {v} | {count} | {pct:.1f}% |")

@@ -1,5 +1,8 @@
 """Tests for next_batch.py — queue popping and output format."""
 import os
+import subprocess
+import sys
+from pathlib import Path
 
 from conftest import run_script
 
@@ -109,4 +112,32 @@ class TestNextBatch:
 
         # Pop remaining
         run_script("next_batch.py", [str(run_dir), "--batch-size", "2"])
+        assert self._read_queue(run_dir) == []
+
+    def test_concurrent_pops_do_not_duplicate_keys(self, tmp_path):
+        run_dir = tmp_path / "run"
+        run_dir.mkdir()
+        all_keys = [f"RHAISTRAT-{i}" for i in range(1, 101)]
+        self._write_queue(run_dir, all_keys)
+
+        script = Path(__file__).resolve().parents[2] / "scripts" / "assess-strat" / "next_batch.py"
+        workers = [
+            subprocess.Popen(
+                [sys.executable, str(script), str(run_dir), "--batch-size", "20"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            for _ in range(5)
+        ]
+
+        batches = []
+        for worker in workers:
+            stdout, stderr = worker.communicate()
+            assert worker.returncode == 0, stderr
+            _, batch = self._parse_batch_output(stdout)
+            batches.extend(batch)
+
+        assert sorted(batches) == sorted(all_keys)
+        assert len(batches) == len(set(batches))
         assert self._read_queue(run_dir) == []

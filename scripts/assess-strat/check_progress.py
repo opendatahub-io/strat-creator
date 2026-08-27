@@ -37,7 +37,7 @@ def main():
 
     print(f"COMPLETED={completed}")
     print(f"TOTAL={total}")
-    print(f"REMAINING={total - completed}")
+    print(f"REMAINING={max(total - completed, 0)}")
 
 
 if __name__ == "__main__":

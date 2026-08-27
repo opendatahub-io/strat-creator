@@ -90,6 +90,18 @@ class TestSummarize:
         assert "Revise:** 1" in out
         assert "Reject:** 1" in out
 
+    def test_split_verdict_is_reported_separately(self, capsys):
+        rows = [
+            {"ID": "S-1", "Title": "Split", "Feasibility": 1, "Testability": 1,
+             "Scope": 1, "Architecture": 1, "Total": 4, "Verdict": "SPLIT",
+             "Needs_Attention": "True"},
+        ]
+        summarize(rows)
+        out = capsys.readouterr().out
+        assert "Revise:** 0" in out
+        assert "Split:** 1" in out
+        assert "| SPLIT | 1 | 100.0% |" in out
+
     def test_errors_excluded_from_averages(self, capsys):
         rows = [
             {"ID": "S-1", "Title": "A", "Feasibility": 2, "Testability": 2,

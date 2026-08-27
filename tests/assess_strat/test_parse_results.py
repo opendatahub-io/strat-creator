@@ -5,7 +5,12 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "scripts", "assess-strat"))
 from conftest import make_result_file, run_script
-from parse_results import compute_verdict, extract_scores, extract_title
+from parse_results import (
+    compute_verdict,
+    extract_scores,
+    extract_title,
+    sanitize_csv_value,
+)
 
 # ---------------------------------------------------------------------------
 # compute_verdict
@@ -194,6 +199,17 @@ Some trailing text.
         result = extract_scores(text)
         assert result["Feasibility"] == 2
 
+    def test_out_of_range_score_returns_none(self):
+        text = """\
+| Criterion | Score |
+|-----------|-------|
+| Feasibility | 10/2 |
+| Testability | 2/2 |
+| Scope | 2/2 |
+| Architecture | 2/2 |
+"""
+        assert extract_scores(text) is None
+
 
 # ---------------------------------------------------------------------------
 # extract_title
@@ -267,3 +283,28 @@ class TestParseResultsCLI:
         with open(tmp_path / "scores.csv") as f:
             rows = list(csv.DictReader(f))
         assert len(rows) == 1
+
+    def test_csv_formula_values_are_escaped(self, tmp_path):
+        result_file = tmp_path / "=formula.result.md"
+        result_file.write_text("""\
+TITLE: =SUM(1,1)
+| Criterion | Score |
+|-----------|-------|
+| Feasibility | 2/2 |
+| Testability | 2/2 |
+| Scope | 2/2 |
+| Architecture | 2/2 |
+""")
+
+        result = run_script("parse_results.py", [str(tmp_path)])
+        assert result.returncode == 0
+        with open(tmp_path / "scores.csv") as f:
+            row = next(csv.DictReader(f))
+        assert row["ID"] == "'=formula"
+        assert row["Title"] == "'=SUM(1,1)"
+
+
+def test_sanitize_csv_value_escapes_formula_prefixes():
+    for value in ("=1+1", "+1", "-1", "@formula"):
+        assert sanitize_csv_value(value) == f"'{value}"
+    assert sanitize_csv_value("normal value") == "normal value"

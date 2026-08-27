@@ -37,3 +37,16 @@ class TestPrepSingle:
     def test_no_args_exits_1(self):
         result = run_script("prep_single.py", [])
         assert result.returncode == 1
+
+    def test_rejects_key_path_traversal_before_deleting(self, tmp_path):
+        single_dir = tmp_path / "single"
+        single_dir.mkdir()
+        outside = tmp_path / "outside.result.md"
+        outside.write_text("must remain")
+
+        result = run_script(
+            "prep_single.py", ["../outside", "--single-dir", str(single_dir)]
+        )
+
+        assert result.returncode != 0
+        assert outside.read_text() == "must remain"

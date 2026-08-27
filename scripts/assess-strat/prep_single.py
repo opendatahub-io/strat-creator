@@ -13,6 +13,7 @@ Usage:
 import argparse
 import os
 import sys
+from pathlib import Path
 
 
 def main():
@@ -30,12 +31,25 @@ def main():
     args = parser.parse_args()
 
     key = args.key
-    single_dir = args.single_dir
-    os.makedirs(single_dir, exist_ok=True)
+    if (
+        not key
+        or os.path.isabs(key)
+        or "/" in key
+        or "\\" in key
+        or key in {".", ".."}
+    ):
+        parser.error("key must be a simple strategy filename, not a path")
+
+    single_dir = Path(args.single_dir).resolve()
+    single_dir.mkdir(parents=True, exist_ok=True)
 
     for suffix in (".result.md",):
-        path = os.path.join(single_dir, f"{key}{suffix}")
-        if os.path.exists(path):
+        path = (single_dir / f"{key}{suffix}").resolve()
+        try:
+            path.relative_to(single_dir)
+        except ValueError:
+            parser.error("result path escapes --single-dir")
+        if path.exists():
             os.remove(path)
             print(f"REMOVED={path}")
 

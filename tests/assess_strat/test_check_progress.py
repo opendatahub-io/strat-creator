@@ -56,6 +56,7 @@ class TestCheckProgress:
         kv = parse_kv_output(result.stdout)
         assert int(kv["COMPLETED"]) == 1
         assert int(kv["TOTAL"]) == 0
+        assert int(kv["REMAINING"]) == 0
 
     def test_missing_run_dir(self, tmp_path):
         result = run_script("check_progress.py", [str(tmp_path / "nonexistent")])
