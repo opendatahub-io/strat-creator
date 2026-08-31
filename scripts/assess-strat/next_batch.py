@@ -30,6 +30,8 @@ def main():
     parser.add_argument("--batch-size", type=int, default=30,
                         help="Number of keys to return (default: 30)")
     args = parser.parse_args()
+    if args.batch_size <= 0:
+        parser.error("--batch-size must be greater than zero")
 
     queue_file = os.path.join(args.run_dir, "queue.txt")
 

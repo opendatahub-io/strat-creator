@@ -97,6 +97,17 @@ class TestNextBatch:
         assert kv["REMAINING"] == "20"
         assert len(keys) == 30
 
+    def test_rejects_non_positive_batch_size(self, tmp_path):
+        run_dir = tmp_path / "run"
+        run_dir.mkdir()
+
+        for batch_size in ("0", "-1"):
+            result = run_script(
+                "next_batch.py", [str(run_dir), "--batch-size", batch_size]
+            )
+            assert result.returncode == 2
+            assert "--batch-size must be greater than zero" in result.stderr
+
     def test_sequential_pops_drain_queue(self, tmp_path):
         run_dir = tmp_path / "run"
         run_dir.mkdir()

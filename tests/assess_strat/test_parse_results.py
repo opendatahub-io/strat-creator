@@ -210,6 +210,17 @@ Some trailing text.
 """
         assert extract_scores(text) is None
 
+    def test_wrong_denominator_returns_none(self):
+        text = """\
+| Criterion | Score |
+|-----------|-------|
+| Feasibility | 2/20 |
+| Testability | 2/2 |
+| Scope | 2/2 |
+| Architecture | 2/2 |
+"""
+        assert extract_scores(text) is None
+
 
 # ---------------------------------------------------------------------------
 # extract_title

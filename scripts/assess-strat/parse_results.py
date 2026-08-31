@@ -83,9 +83,9 @@ def extract_scores(text):
 
         # Extract score: N/2 or bare integer. Capture the complete numeric
         # value so a malformed 10/2 cannot silently become 1/2.
-        score_m = re.search(r"(\d+)\s*/\s*2", score_cell)
+        score_m = re.fullmatch(r"\s*(\d+)\s*/\s*2\s*", score_cell)
         if not score_m:
-            score_m = re.match(r"^\s*(\d+)\s*$", score_cell)
+            score_m = re.fullmatch(r"\s*(\d+)\s*", score_cell)
         score = int(score_m.group(1)) if score_m else None
 
         if score is None:
