@@ -43,15 +43,8 @@ re-entered.
 Fetch the STRAT with its project, status, labels, issue links, and subtasks:
 
 ~~~bash
-python3 -c "
-import json, sys
-sys.path.insert(0, '${CLAUDE_SKILL_DIR}/scripts')
-from jira_utils import get_issue, require_env
-s, u, t = require_env()
-data = get_issue(s, u, t, sys.argv[1],
-                 fields=['project', 'status', 'labels', 'issuelinks', 'subtasks'])
-print(json.dumps(data, indent=2))
-" RHAISTRAT-NNNN
+python3 ${CLAUDE_SKILL_DIR}/scripts/get_issue_json.py RHAISTRAT-NNNN \
+  --fields project,status,labels,issuelinks,subtasks
 ~~~
 
 Stop and report an error if any of these checks fail:
@@ -71,22 +64,10 @@ each such link, inspect both outwardIssue and inwardIssue; the source RFE is
 the first linked key beginning RHAIRFE-. If there is no such key, report
 RHAISTRAT-NNNN has no Cloners link to an RHAIRFE and stop.
 
-Find child Epics through the parent hierarchy, then include any RHAISTRAT
-subtasks as a fallback. Do not rely on a fixed key suffix:
+Find child Epics through the parent hierarchy:
 
 ~~~bash
-python3 -c "
-import json, sys
-sys.path.insert(0, '${CLAUDE_SKILL_DIR}/scripts')
-from jira_utils import require_env, search_issues
-s, u, t = require_env()
-issues = search_issues(s, u, t,
-                       'parent = ' + sys.argv[1] + ' AND project = RHAISTRAT',
-                       fields=['key', 'issuetype'])
-epics = [issue['key'] for issue in issues
-         if issue.get('fields', {}).get('issuetype', {}).get('name') == 'Epic']
-print(json.dumps(epics))
-" RHAISTRAT-NNNN
+python3 ${CLAUDE_SKILL_DIR}/scripts/find_child_epics.py RHAISTRAT-NNNN
 ~~~
 
 If any child epics exist, warn before proceeding:
@@ -121,36 +102,16 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/state.py set "$STATE_FILE" \
 
 ## Step 4: Comment on and close the STRAT
 
-First add this exact semantic content to the STRAT. Use markdown_to_adf() and
-a Markdown level-three heading so Jira receives an ADF heading equivalent to
-h3. Strategy rejected:
-
-~~~markdown
-### Strategy rejected
-
-{rejection reason from SME}
-
-This strategy has been closed. The source RFE (RHAIRFE-MMMM) has been
-returned for rework.
-~~~
-
-Post it with add_comment():
+Format the rejection comment and post it:
 
 ~~~bash
-python3 -c "
-import sys
-from pathlib import Path
-sys.path.insert(0, '${CLAUDE_SKILL_DIR}/scripts')
-from jira_utils import add_comment, markdown_to_adf, require_env
-s, u, t = require_env()
-reason_path, strat_key, rfe_key = sys.argv[1:]
-body = '\n\n'.join([
-    '### Strategy rejected',
-    Path(reason_path).read_text().strip(),
-    f'This strategy has been closed. The source RFE ({rfe_key}) has been returned for rework.',
-]) + '\n'
-add_comment(s, u, t, strat_key, markdown_to_adf(body))
-" "$REASON_FILE" RHAISTRAT-NNNN RHAIRFE-MMMM
+python3 ${CLAUDE_SKILL_DIR}/scripts/format_reject_comment.py strat \
+  --reason-file "$REASON_FILE" \
+  --strat-key RHAISTRAT-NNNN \
+  --rfe-key RHAIRFE-MMMM > tmp/strat-comment.md
+
+python3 ${CLAUDE_SKILL_DIR}/scripts/post_comment.py RHAISTRAT-NNNN \
+  --body-file tmp/strat-comment.md
 ~~~
 
 Record phase=strat-commented only after the comment succeeds:
@@ -171,13 +132,7 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/state.py set "$STATE_FILE" \
 Otherwise, fetch and display every available transition:
 
 ~~~bash
-python3 -c "
-import json, sys
-sys.path.insert(0, '${CLAUDE_SKILL_DIR}/scripts')
-from jira_utils import get_transitions, require_env
-s, u, t = require_env()
-print(json.dumps(get_transitions(s, u, t, sys.argv[1]), indent=2))
-" RHAISTRAT-NNNN
+python3 ${CLAUDE_SKILL_DIR}/scripts/get_transitions_json.py RHAISTRAT-NNNN
 ~~~
 
 Find a transition whose destination status (to.name) is Closed. Select Won't
@@ -185,18 +140,11 @@ Do as its resolution when that resolution is available; otherwise use Rejected
 when available. Inspect the selected transition's resolution allowedValues
 when Jira supplies them. If Jira does not supply allowedValues, try Won't Do;
 only if Jira rejects that resolution may you retry the same Closed transition
-with Rejected. Execute only that transition using do_transition() with a
-resolution field:
+with Rejected. Execute only that transition:
 
 ~~~bash
-python3 -c "
-import sys
-sys.path.insert(0, '${CLAUDE_SKILL_DIR}/scripts')
-from jira_utils import do_transition, require_env
-s, u, t = require_env()
-do_transition(s, u, t, sys.argv[1], sys.argv[2],
-              fields={'resolution': {'name': sys.argv[3]}})
-" RHAISTRAT-NNNN TRANSITION_ID "Won't Do"
+python3 ${CLAUDE_SKILL_DIR}/scripts/do_transition.py RHAISTRAT-NNNN \
+  TRANSITION_ID --resolution "Won't Do"
 ~~~
 
 If there is no transition to Closed, a usable resolution cannot be selected,
@@ -216,68 +164,38 @@ SME that the RFE is already closed, but continue. The human must reopen it or
 create a new RFE; this skill does neither.
 
 ~~~bash
-python3 -c "
-import json, sys
-sys.path.insert(0, '${CLAUDE_SKILL_DIR}/scripts')
-from jira_utils import get_issue, require_env
-s, u, t = require_env()
-print(json.dumps(get_issue(s, u, t, sys.argv[1], fields=['status']), indent=2))
-" RHAIRFE-MMMM
+python3 ${CLAUDE_SKILL_DIR}/scripts/get_issue_json.py RHAIRFE-MMMM \
+  --fields status
 ~~~
 
-Add this ADF-formatted comment to the RFE using add_comment() and
-markdown_to_adf():
-
-~~~markdown
-### Strategy rejected — rework needed
-
-The strategy RHAISTRAT-NNNN has been rejected for the following reason:
-
-{rejection reason from SME}
-
-Please review and update this RFE. When ready, remove the
-strat-creator-rework-needed label to allow a new strategy to be created.
-~~~
-
-Post it, then record phase=rfe-commented after the comment succeeds:
+Format the rejection comment and post it to the RFE:
 
 ~~~bash
-python3 -c "
-import sys
-from pathlib import Path
-sys.path.insert(0, '${CLAUDE_SKILL_DIR}/scripts')
-from jira_utils import add_comment, markdown_to_adf, require_env
-s, u, t = require_env()
-reason_path, strat_key, rfe_key = sys.argv[1:]
-body = '\n\n'.join([
-    '### Strategy rejected — rework needed',
-    f'The strategy {strat_key} has been rejected for the following reason:',
-    Path(reason_path).read_text().strip(),
-    'Please review and update this RFE. When ready, remove the strat-creator-rework-needed label to allow a new strategy to be created.',
-]) + '\n'
-add_comment(s, u, t, rfe_key, markdown_to_adf(body))
-" "$REASON_FILE" RHAISTRAT-NNNN RHAIRFE-MMMM
+python3 ${CLAUDE_SKILL_DIR}/scripts/format_reject_comment.py rfe \
+  --reason-file "$REASON_FILE" \
+  --strat-key RHAISTRAT-NNNN \
+  --rfe-key RHAIRFE-MMMM > tmp/rfe-comment.md
 
+python3 ${CLAUDE_SKILL_DIR}/scripts/post_comment.py RHAIRFE-MMMM \
+  --body-file tmp/rfe-comment.md
+~~~
+
+Record phase=rfe-commented after the comment succeeds:
+
+~~~bash
 python3 ${CLAUDE_SKILL_DIR}/scripts/state.py set "$STATE_FILE" \
   "phase=rfe-commented"
 ~~~
 
-Then perform the label updates in this order. Both calls are intentionally
-idempotent:
+Then perform the label updates. Both operations are intentionally idempotent:
 
 ~~~bash
-python3 -c "
-import sys
-sys.path.insert(0, '${CLAUDE_SKILL_DIR}/scripts')
-from jira_utils import add_labels, remove_labels, require_env
-s, u, t = require_env()
-rfe_key = sys.argv[1]
-remove_labels(s, u, t, rfe_key, ['strat-creator-consumed'])
-add_labels(s, u, t, rfe_key, ['strat-creator-rework-needed'])
-" RHAIRFE-MMMM
+python3 ${CLAUDE_SKILL_DIR}/scripts/update_labels.py RHAIRFE-MMMM \
+  --remove strat-creator-consumed \
+  --add strat-creator-rework-needed
 ~~~
 
-Record phase=complete only after both label calls succeed. If
+Record phase=complete only after the label update succeeds. If
 strat-creator-consumed is absent, its removal is a no-op and is not an error:
 
 ~~~bash
