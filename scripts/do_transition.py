@@ -9,7 +9,6 @@ Environment variables: JIRA_SERVER, JIRA_USER, JIRA_TOKEN
 """
 
 import argparse
-import sys
 
 from jira_utils import do_transition, require_env
 

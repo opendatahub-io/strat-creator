@@ -5,14 +5,17 @@ Reads the rejection reason from a file and outputs the formatted markdown
 comment to stdout. Pipe the output to a file for use with post_comment.py.
 
 Usage:
-    python3 scripts/format_reject_comment.py strat --reason-file tmp/reason.md --strat-key RHAISTRAT-2283 --rfe-key RHAIRFE-1234 > tmp/strat-comment.md
-    python3 scripts/format_reject_comment.py rfe   --reason-file tmp/reason.md --strat-key RHAISTRAT-2283 --rfe-key RHAIRFE-1234 > tmp/rfe-comment.md
+    python3 scripts/format_reject_comment.py strat \\
+        --reason-file tmp/reason.md --strat-key RHAISTRAT-2283 \\
+        --rfe-key RHAIRFE-1234 > tmp/strat-comment.md
+    python3 scripts/format_reject_comment.py rfe \\
+        --reason-file tmp/reason.md --strat-key RHAISTRAT-2283 \\
+        --rfe-key RHAIRFE-1234 > tmp/rfe-comment.md
 """
 
 import argparse
 import sys
 from pathlib import Path
-
 
 STRAT_TEMPLATE = """\
 ### Strategy rejected
@@ -29,7 +32,8 @@ The strategy {strat_key} has been rejected for the following reason:
 
 {reason}
 
-Please review and update this RFE. When ready, remove the strat-creator-rework-needed label to allow a new strategy to be created.
+Please review and update this RFE. When ready, remove the
+strat-creator-rework-needed label to allow a new strategy to be created.
 """
 
 

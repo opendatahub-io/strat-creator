@@ -21,7 +21,7 @@ from jira_utils import add_labels, remove_labels, require_env
 def _parse_labels(value):
     if not value:
         return []
-    return [l.strip() for l in value.split(",") if l.strip()]
+    return [part.strip() for part in value.split(",") if part.strip()]
 
 
 def main():
