@@ -23,7 +23,7 @@ This strategy has been closed. The source RFE ({rfe_key}) has been returned for 
 """
 
 RFE_TEMPLATE = """\
-### Strategy rejected — rework needed
+### Strategy rejected -- rework needed
 
 The strategy {strat_key} has been rejected for the following reason:
 

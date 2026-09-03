@@ -1,6 +1,6 @@
 ---
 name: strategy-reject
-description: Reject a pipeline-created strategy, close it in Jira, and return its source RFE for human rework.
+description: Use when an SME rejects a pipeline-created strategy. Closes it in Jira and returns its source RFE for human rework.
 user-invocable: true
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash, AskUserQuestion
 ---
@@ -209,8 +209,8 @@ terminal:
 
 ~~~
 Strategy rejected:
-  STRAT:  RHAISTRAT-NNNN → Closed
-  RFE:    RHAIRFE-MMMM   → strat-creator-rework-needed
+  STRAT:  RHAISTRAT-NNNN -> Closed
+  RFE:    RHAIRFE-MMMM   -> strat-creator-rework-needed
 
 The RFE is now on hold. To resume:
   1. Update the RFE or leave a comment with new context
