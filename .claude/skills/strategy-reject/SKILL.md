@@ -43,7 +43,7 @@ re-entered.
 Fetch the STRAT with its project, status, labels, issue links, and subtasks:
 
 ~~~bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/get_issue_json.py RHAISTRAT-NNNN \
+python3 ${CLAUDE_SKILL_DIR}/scripts/fetch_issue.py RHAISTRAT-NNNN \
   --fields project,status,labels,issuelinks,subtasks
 ~~~
 
@@ -164,7 +164,7 @@ SME that the RFE is already closed, but continue. The human must reopen it or
 create a new RFE; this skill does neither.
 
 ~~~bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/get_issue_json.py RHAIRFE-MMMM \
+python3 ${CLAUDE_SKILL_DIR}/scripts/fetch_issue.py RHAIRFE-MMMM \
   --fields status
 ~~~
 
