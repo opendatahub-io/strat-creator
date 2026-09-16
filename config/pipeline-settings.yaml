@@ -4,6 +4,7 @@ jql:
   required_labels:
     - strat-creator-3.5
     - strat-creator-3.6
+    - strat-creator-3.7
   target_versions:     # OR'd with required_labels via cf[10855]
     # Legacy short names (still on older tickets)
     - rhoai-3.5
@@ -32,6 +33,13 @@ jql:
     - "3.6 GA RHAII RELEASE"
     - "3.6 GA RHOAI RELEASE"
     - "3.6 GA RHELAI RELEASE"
+    # 3.7 milestones — RHAII, RHOAI, RHELAI
+    - "3.7 EA RHAII RELEASE"
+    - "3.7 EA RHOAI RELEASE"
+    - "3.7 EA RHELAI RELEASE"
+    - "3.7 GA RHAII RELEASE"
+    - "3.7 GA RHOAI RELEASE"
+    - "3.7 GA RHELAI RELEASE"
   quality_labels:      # at least one required
     - rfe-creator-autofix-rubric-pass
     - tech-reviewed
