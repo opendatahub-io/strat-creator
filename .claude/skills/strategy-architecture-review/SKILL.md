@@ -57,6 +57,7 @@ For each strategy:
 4. **Is the deployment model correct?** Does the strategy account for how the affected components are actually deployed (Operators, Helm, standalone)?
 5. **Are there architectural conflicts?** Does this strategy conflict with other known strategies or platform direction?
 6. **Are cross-component coordination needs identified?** If the strategy touches multiple components, does it account for versioning, rollout order, and backwards compatibility between them?
+7. **Are paired upstream repos kept apart?** The architecture inventory has no `vllm-omni` component doc, so a strategy can silently file vLLM-Omni work under vLLM. Read `.claude/skills/strategy-refine/upstream-project-boundaries.md`. Report as an incorrect assumption any Affected Components row, dependency, or integration claim that puts a vLLM-Omni capability in `vllm-project/vllm` or the reverse, and any upstream citation missing repo, state, author, or date. Do not treat the absent inventory entry as evidence that vLLM-Omni is not a real component.
 
 If this is a re-review:
 - What concerns from the prior review were addressed?

@@ -119,6 +119,10 @@ Changes limited to the following are **workflow output, not code changes**, and 
 
 Strategy skills (`strategy-create`, `strategy-refine`, `strategy-review`) produce only workflow output during normal operation. Do not run repository tests after completing a strategy workflow unless the workflow also modified a repository implementation file listed above.
 
+## Upstream Project Boundaries
+
+Some Red Hat AI components map to more than one upstream repository with similar names (vLLM vs. vLLM-Omni is the running case), and the architecture context does not always carry a component doc for the sibling repo. `.claude/skills/strategy-refine/upstream-project-boundaries.md` lists the pairs, which repo owns which capability, how to verify from code, and the citation format for PRs and issues. `strategy-refine`, `strategy-feasibility-review`, and `strategy-architecture-review` read it. A mirror lives in `rfe-creator`; change both together.
+
 ## Architecture Context
 
 Strategy skills fetch architecture context from opendatahub-io/architecture-context into `.context/architecture-context/`. Used during refinement and review to ground feedback in real platform architecture.

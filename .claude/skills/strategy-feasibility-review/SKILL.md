@@ -41,6 +41,7 @@ For each strategy:
 6. **Are Risks and Assumptions separated?** Risks (things that could go wrong) and Assumptions (things believed true but unvalidated) serve different purposes. Combined or missing sections indicate the strategy hasn't distinguished between what needs mitigation and what needs validation.
 7. **Does each risk have a concrete mitigation?** "Track closely", "monitor", or "coordinate with team" are not mitigations — a mitigation is a specific action or fallback that reduces impact if the risk materializes.
 8. **Is the Risks section populated?** An empty Risks section for a multi-team or L/XL strategy indicates unknowns haven't been surfaced, not that none exist. Every non-trivial strategy has risks — absence of listed risks is itself a red flag.
+9. **Is each capability attributed to the repo that owns it?** vLLM (`vllm-project/vllm`) and vLLM-Omni (`vllm-project/vllm-omni`) are separate projects; both register `WS /v1/realtime` and they mean different things by it. Check the strategy against `.claude/skills/strategy-refine/upstream-project-boundaries.md`. Flag as a key concern: a capability placed in the wrong repo, a feature described as new that the boundaries file (or the code) shows exists at HEAD, and any PR or issue reference without repo, state, author, and date. A strategy whose dependencies rest on a bare PR number is `needs revision`, not `feasible`.
 
 If this is a re-review:
 - What concerns from the prior review were addressed?
