@@ -27,7 +27,7 @@ Cross-reference against the source RFEs to verify the strategy actually delivers
 
 ## Architecture Context
 
-Check for architecture context in `.context/architecture-context/architecture/`. If a `rhoai-*` directory exists, read `PLATFORM.md` and relevant component docs to ground your assessment.
+Read `.context/architecture-context/LATEST_VERSION` directly with the Read tool to get the version directory name (e.g., `rhoai-3.4-ea.2`). Do NOT use Glob or Bash to check existence first - just Read it; if the file is missing, Read returns an error, which is the fallback condition below. Then Read `.context/architecture-context/architecture/<version>/PLATFORM.md` and relevant component docs. Use these to ground the feasibility assessment in the actual platform. If either Read fails, assess based on the strategy content alone and state that architecture context was not available.
 
 ## What to Assess
 
