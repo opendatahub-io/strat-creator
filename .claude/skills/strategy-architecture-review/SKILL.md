@@ -27,18 +27,25 @@ Cross-reference against the source RFEs. If this is a re-review (prior review fi
 
 ## Architecture Context
 
-Check for architecture context in `.context/architecture-context/architecture/`. If a `rhoai-*` directory exists, read `PLATFORM.md` and the component docs relevant to each strategy.
+Read `.context/architecture-context/LATEST_VERSION` directly with the Read tool to get the version directory name (e.g., `rhoai-3.4-ea.2`). Do NOT use Glob or Bash to check existence first - just Read it; if the file is missing, Read returns an error, which is the fallback condition below. Then Read `.context/architecture-context/architecture/<version>/PLATFORM.md` and the component docs relevant to each strategy. Use these to ground the architecture assessment in the actual platform.
 
-If architecture context is not available, skip this review and output:
+If the Read on `LATEST_VERSION` returns an error (file not found) or the PLATFORM.md read fails, skip this review and output:
 ```
 Architecture review skipped — no architecture context available.
 ```
 
 ## Architecture Context Overlays
 
-Check for overlay files in `.context/architecture-context/overlays/`. If the directory exists, read all `*.md` files (excluding `README.md`) with `status: active` in their frontmatter. These are human-authored corrections to the generated architecture docs — version bumps, maturity changes, dependency shifts.
+Check for overlay files with the Glob tool: `.context/architecture-context/overlays/*.md`. Read each match except `README.md` and keep the ones with `status: active` in their frontmatter. Frontmatter can run to 40 lines and keeps growing, so pass `limit: 60` to Read for this filtering pass rather than loading whole files. Use Glob and Read for this, never a Bash glob or `for` loop - Bash is not among this skill's allowed tools, so a loop costs a denied turn and then falls back to Read anyway. These overlays are human-authored corrections to the generated architecture docs - version bumps, maturity changes, dependency shifts.
 
-When reviewing a strategy's architecture claims, check whether any active overlay corrects or updates the information the strategy references. If a strategy uses outdated information that an overlay corrects (e.g., references KFP SDK 2.15 when an overlay says 2.16), flag it as a finding. Overlays take precedence over the generated architecture docs when they conflict.
+Filter for relevant overlays:
+1. **Status**: `status` must be `active` (ignore `superseded`)
+2. **Release**: `release` list must contain the target RHOAI release or `"all"`
+3. **Component match**: `affects` list must intersect with the components the strategy touches. Overlays with `affects: [platform]` match all strategies.
+
+For each matched overlay, read its `## Fact` and `## Impact on Strategies` sections. Use these to correct or supplement the architecture docs when reviewing architecture claims. Overlays take precedence over the generated architecture docs when they conflict.
+
+When reviewing a strategy's architecture claims, check whether any matched overlay corrects or updates the information the strategy references. If a strategy uses outdated information that an overlay corrects (e.g., references KFP SDK 2.15 when an overlay says 2.16), flag it as a finding.
 
 When overlays are applied, print which ones were used:
 
@@ -46,6 +53,8 @@ When overlays are applied, print which ones were used:
 Overlays applied:
 - 0001: KFP SDK updated to 2.16 in RHOAI 3.4
 ```
+
+If no overlays directory exists or no overlays match, proceed without them.
 
 ## What to Assess
 

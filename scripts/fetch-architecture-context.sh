@@ -22,6 +22,8 @@ if [ -n "$1" ]; then
   rm -rf "$CONTEXT_DIR"
   mkdir -p "$CONTEXT_DIR"
   cp -R "$LOCAL_PATH"/* "$CONTEXT_DIR"/
+  # Marker the review skills Read instead of probing directories (mirrors the remote path below).
+  ls "$CONTEXT_DIR/architecture" 2>/dev/null | grep '^rhoai-' | sort | tail -1 > "$CONTEXT_DIR/LATEST_VERSION"
   echo "Architecture context copied from local path: $LOCAL_PATH"
   exit 0
 fi
@@ -45,4 +47,6 @@ else
   git -C "$CONTEXT_DIR" sparse-checkout set "architecture/$LATEST" "overlays"
 fi
 
+# Marker the review skills Read instead of probing directories with Glob or Bash.
+echo "$LATEST" > "$CONTEXT_DIR/LATEST_VERSION"
 echo "Architecture context ready: $CONTEXT_DIR/architecture/$LATEST"
