@@ -57,9 +57,9 @@ In JQL mode, RFEs go through a two-stage filter before reaching the skills:
 
 **Stage 1 — Jira-side (JQL query):**
 - Must be in `RHAIRFE` project
-- Must have `strat-creator-3.5` label
-- Must have at least one quality label (`rfe-creator-autofix-rubric-pass` or `tech-reviewed`)
-- Must NOT be in `Closed`, `Resolved`, or `Draft` status
+- Must have at least one label in `jql.required_labels` or a Target Version in `jql.target_versions`
+- Must have at least one label in `jql.quality_labels` when that list is configured
+- Must NOT have a status in `jql.excluded_statuses`
 - Ordered by `key ASC` for deterministic batching
 
 **Stage 2 — Pre-filter (before batching):**
