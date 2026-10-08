@@ -37,17 +37,17 @@ sequenceDiagram
     CI->>Pre: fullsend run strat-*
     Pre->>Pre: clone strat-creator at STRAT_CREATOR_REF, vendor into target
     Pre->>Pre: fetch architecture context (fail before any lock)
-    Pre->>Pre: resume points, human gates, lock once, run.json, tmp/strat-input.json
+    Pre->>Pre: resume points, human gates, expected create skips, lock once, run.json
     Pre-->>CI: exit 78 when nothing to do (no sandbox, no model)
     CI->>SB: prompt "Run the agent task"
     SB->>WF: Workflow {name: "strat-pipeline:strat-pipeline"}
     WF->>WF: read, create, refine x N, push, score x N, review x N, result
     WF-->>SB: agent-result.json written
     SB-->>Val: output + downloaded repository
-    Val->>Val: schema, run record, progress, artifacts, scores, Jira readback
+    Val->>Val: schema, run record, create skips vs host gates, progress, artifacts, scores, Jira
     Val-->>SB: FAIL lines become the next attempt's prompt (max 2)
     Val->>Post: passed
-    Post->>Post: handoff regular files, report, optional publication
+    Post->>Post: handoff of listed files, report, optional publication
     CI->>CI: release-locks.sh from the host clone, whatever the exit status
 ```
 
@@ -57,7 +57,7 @@ sequenceDiagram
 | `plugins/strat-pipeline/workflows/strat-pipeline.js` | sandbox, as a fullsend-scanned plugin | the order of the steps |
 | skills, `strat-scorer`, `scripts/strat_pipeline_state.py` | sandbox | Jira, with `JIRA_TOKEN` |
 | `shared/validate-output.sh`, `validate_result.py` | host, after each attempt | reads the downloaded repository as data |
-| `shared/post-strategy.sh`, `handoff.py`, `publish/` | host, after validation | copies regular files only |
+| `shared/post-strategy.sh`, `handoff.py`, `publish/` | host, after validation | copies only the regular files the validated result lists |
 | `shared/release-locks.sh` | CI, after `fullsend run` | the host lock record |
 
 The agent never locks or unlocks RFEs and never sees JQL. The sandbox can reach
@@ -70,7 +70,10 @@ repository's Python Jira client signs those requests itself, so the token
 cannot stay on the runner the way rfe-creator's read-only Jira provider keeps
 it. The policy limits that token to `redhat.atlassian.net:443`, called from
 `python3`. The `strat-resume` trigger accepts only a human with `write`,
-`maintain` or `admin` role, because the run it starts writes to Jira.
+`maintain` or `admin` role, because the run it starts writes to Jira. The
+role of a Jira commenter comes from fullsend's Jira adapter. The trigger was
+evaluated with `fullsend dispatch` on the event fixtures in
+`tests/fixtures/fullsend-events/`, not on a live Jira event.
 
 ## The Workflow
 
@@ -89,6 +92,27 @@ Each step records its outcome in `tmp/strat-progress.json` through
 `scripts/strat_pipeline_state.py`. When `agent()` returns `null` (the agent
 failed or was stopped), the script records the step and key with `--failed`,
 and the result is `failed`. It is never reported as completed.
+
+Parallel steps take a file lock around each progress update, so no step's
+entry is lost. A create that leaves some RFEs with neither a strategy nor a
+skip stays open, and the next attempt runs `strategy-create` for those RFEs
+only. A push covers the refined strategies that
+`push_refined_strategies.py` pushes: status `Refined`, with a matching
+`jira_key`. A strategy
+refined later, by a retried create, gets a push of its own before its review,
+and a refined strategy no push covers is never reviewed.
+
+The agent cannot skip work by claiming it was skipped. Before the run,
+`prepare_run.py` evaluates `strategy-create`'s gates for every locked RFE:
+excluded status, release scope, quality label, and STRAT state, from
+`config/pipeline-settings.yaml`. It records the outcome as `expected_skips` in
+the host run record. If the host cannot evaluate the gates, nothing is locked
+and the run fails. A claimed skip the host did not expect stays pending, so
+the next attempt runs `strategy-create` for that RFE again. The validator rejects a claimed skip the host did not
+expect, and a strategy created for an RFE the host expected to be skipped.
+`strategy-create`'s "reconstruction failed" skip cannot be predicted from Jira
+fields, so it always fails validation, with a line telling a human to restore
+the RFE original or fix the STRAT description.
 
 Workflow agents have no Agent tool, on every Claude Code version tested. So the
 scorer that `strategy-review` would normally launch runs as a workflow agent of
@@ -234,15 +258,15 @@ tests/test_strat_pipeline_workflow.py::test_workflow_runs_headless_under_fullsen
   "dry_run": true,
   "errors": []
 }
-wall 346s, result events at [212, 213], workflow notice at [47, 53, 136, 143, 148, 150, 152, 154, 156, 160, 204]
+wall 438s, result events at [223, 224], workflow notice at [53, 54, 150, 158, 160, 162, 164, 166, 168, 173, 217]
 PASSED
-======================== 1 passed in 346.53s (0:05:46) =========================
+======================== 1 passed in 437.76s (0:07:17) =========================
 ```
 
 `make test-workflow-smoke` runs the same test. The first tool call in that run was `Workflow {"name":"strat-pipeline:strat-pipeline"}`.
 Both `result` events come after the workflow's last completion notice, so the
-`--print` turn waited for the run. It used 10 workflow agents and about 200k
-tokens ($3.24 on Opus list prices, main loop included). Per-step cost is about
+`--print` turn waited for the run. It used 10 workflow agents and about 203k
+tokens ($3.39 on Opus list prices, main loop included). Per-step cost is about
 18k tokens for a step agent and 10k for the restricted-tools scorer.
 
 ## Run it in CI
@@ -272,7 +296,9 @@ exit "${rc}"
 `ANTHROPIC_VERTEX_PROJECT_ID`, `CLOUD_ML_REGION` and `GOOGLE_CLOUD_PROJECT` come
 from the CI secret store. `STRAT_DRY_RUN=1` writes nothing to Jira: candidates
 are checked for blocking labels instead of being locked, and the skills run
-with `--dry-run`.
+with `--dry-run`. Resume points still come from Jira in a dry run. A dry-run
+strategy is a local `STRAT-NNNN` with no Jira clone, so a dry run never
+resumes at `review`.
 
 If the CI job itself is lost, the locks stay. Find them with the JQL
 `labels = strat-creator-processing`, and release them with
@@ -306,10 +332,11 @@ How `base:` resolution works was checked with rfe-creator's published harness:
 `fullsend lock` from a consumer resolved all 12 of its dependencies from the
 base URL. The strat-creator URLs exist only once this change is merged.
 
-Interactive users can install the repository-root plugin
-(`.claude-plugin/plugin.json`) and run
-`/strat-creator:strat-pipeline {"namespace": "strat-creator:"}` from a
-strat-creator checkout that holds a `tmp/strat-input.json`.
+The repository-root plugin (`.claude-plugin/plugin.json`) is for Claude Code
+and marketplace users. It ships the skills, the strat-scorer agent and the
+same workflow. Because the plugin's skills and agent are namespaced, the
+workflow accepts `args.namespace` (`"strat-creator:"`). That interactive path
+was validated with `claude plugin validate .` only; it has not been run.
 
 ## Platform dependency
 
