@@ -20,7 +20,8 @@ plugins:
 # A comment "/fs-strat resume" on a RHAISTRAT issue, delivered by fullsend's
 # Jira integration, starts this agent for that STRAT. The pre-script resolves
 # the STRAT to its RFE, computes the resume point and refuses a STRAT that is
-# still at a human gate. Shape follows fullsend's comment_added triggers
+# still at a human gate. Only a human with write access may start it: the
+# run writes to Jira. Shape follows fullsend's comment_added triggers
 # (docs/guides/user/cel-triggers-reference.md in fullsend v0.45.0).
 trigger: >
   event.transition.kind == "comment_added"
@@ -31,6 +32,7 @@ trigger: >
     && has(event.transition.comment.instruction)
     && event.transition.comment.instruction.startsWith("resume")
     && event.actor.kind == "human"
+    && event.actor.role in ["admin", "maintain", "write"]
 
 host_files:
   - src: shared/gcp-vertex.env

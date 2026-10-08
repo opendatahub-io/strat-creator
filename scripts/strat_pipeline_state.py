@@ -138,10 +138,20 @@ def score_dir(key):
 
 
 def prepare_score_dir(key, clean):
+    """Create /tmp/strat-assess/<KEY> for the scorer, refusing symlinks.
+
+    /tmp can be shared outside the sandbox, so a planted link in place of the
+    run directory (or its parent) must not redirect the scorer's writes or the
+    clean-up below.
+    """
     path = score_dir(key)
+    for part in (SCORE_ROOT, path):
+        if part.is_symlink():
+            die(f"{part} is a symlink; refusing to use it")
+    SCORE_ROOT.mkdir(mode=0o700, exist_ok=True)
     if clean and path.exists():
         shutil.rmtree(path)
-    path.mkdir(parents=True, exist_ok=True)
+    path.mkdir(mode=0o700, exist_ok=True)
 
 
 def skipped_reasons():

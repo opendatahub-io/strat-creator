@@ -64,6 +64,7 @@ def test_only_resume_has_a_trigger():
     ("jira-comment-match.json", ["strat-resume"]),
     ("jira-comment-other-command.json", []),
     ("jira-comment-bot.json", []),
+    ("jira-comment-read-role.json", []),
     ("jira-comment-no-command.json", []),
 ])
 def test_resume_trigger(event, expected, tmp_path):

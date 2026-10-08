@@ -153,3 +153,19 @@ def test_push_does_not_cover_a_task_the_push_script_rejects(repo):
     _run(repo, "mark", "refine", "RHAISTRAT-2")
     out = json.loads(_run(repo, "mark", "push").stdout)
     assert out == {"recorded": "push", "strategies": []}
+
+
+def test_refuses_a_symlinked_score_dir(repo, tmp_path, monkeypatch):
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("sps", SCRIPT)
+    sps = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(sps)
+    root = tmp_path / "assess"
+    root.mkdir()
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    (root / "RHAISTRAT-1").symlink_to(elsewhere)
+    monkeypatch.setattr(sps, "SCORE_ROOT", root)
+    with pytest.raises(SystemExit):
+        sps.prepare_score_dir("RHAISTRAT-1", clean=True)
+    assert elsewhere.is_dir()

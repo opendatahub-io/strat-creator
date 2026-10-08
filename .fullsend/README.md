@@ -64,6 +64,14 @@ The agent never locks or unlocks RFEs and never sees JQL. The sandbox can reach
 Jira (opaque TLS tunnel, `shared/policy.yaml`) and the model provider, and
 nothing else. It cannot reach GitHub or the results services.
 
+The sandbox does hold `JIRA_TOKEN`, and this is a known exposure. Strategy
+creation has to write to Jira (clone, link, label, push, comment), and the
+repository's Python Jira client signs those requests itself, so the token
+cannot stay on the runner the way rfe-creator's read-only Jira provider keeps
+it. The policy limits that token to `redhat.atlassian.net:443`, called from
+`python3`. The `strat-resume` trigger accepts only a human with `write`,
+`maintain` or `admin` role, because the run it starts writes to Jira.
+
 ## The Workflow
 
 `plugins/strat-pipeline/workflows/strat-pipeline.js` has named steps:
