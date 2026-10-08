@@ -6,9 +6,12 @@ checks keep the skill text and the workflow in step; the end-to-end run is the
 headless smoke test in test_strat_pipeline_workflow.py.
 """
 import os
+import re
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 SKILL = os.path.join(ROOT, ".claude", "skills", "strategy-review", "SKILL.md")
+WORKFLOW = os.path.join(ROOT, ".fullsend", "plugins", "strat-pipeline", "workflows", "strat-pipeline.js")
+INTERACTIVE_WORKFLOW = os.path.join(ROOT, "workflows", "strat-pipeline.js")
 
 
 def _read(path):
@@ -41,4 +44,19 @@ def test_step5_uses_the_given_run_dir():
     step5 = _section(_read(SKILL), "## Step 5: Parse Scores")
     assert "replace `/tmp/strat-assess/review` with `<dir>`" in step5
     assert step5.count("/tmp/strat-assess/review") >= 4
+
+
+
+def test_workflow_passes_a_per_strategy_run_dir():
+    script = _read(WORKFLOW)
+    assert "--scores-from ${runDir}" in script
+    # One run directory per strategy, so parallel reviews never share one.
+    assert re.search(r"const runDir = `/tmp/strat-assess/\$\{p\.strat\}`", script)
+    assert "agentType: `${NS}strat-scorer`" in script
+
+
+def test_the_two_workflow_copies_are_identical():
+    # fullsend loads the harness plugin copy; the strat-creator plugin ships the
+    # other for interactive use. Plugin trees may not contain symlinks.
+    assert _read(WORKFLOW) == _read(INTERACTIVE_WORKFLOW)
 
