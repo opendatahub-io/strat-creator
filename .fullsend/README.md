@@ -356,5 +356,7 @@ The three publication helpers in `shared/publish/` (`push-results.py`,
 github.com/jctanner-opendatahub-io/strat-creator at `78ab3f1e`
 (`.fullsend/scripts/ci/`, Apache-2.0). They have no other public source. Their
 logic is unchanged; the only edits are the provenance comments, two
-documentation examples and two lint fixes (an f-string without placeholders,
-one long line). Everything else under `.fullsend/` is new.
+documentation examples, two lint fixes (an f-string without placeholders,
+one long line), and the commit trailer `push-results.py` writes, which is now
+`Assisted-by: Claude` instead of `Co-Authored-By`. Everything else under
+`.fullsend/` is new.
