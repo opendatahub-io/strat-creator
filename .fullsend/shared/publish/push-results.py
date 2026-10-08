@@ -161,7 +161,7 @@ def main():
     message = (
         f"Strategy pipeline run {run_dir.name}\n\n"
         f"{len(tasks)} strategies, {len(reviews)} reviews\n\n"
-        "Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
+        "Assisted-by: Claude"
     )
     result = git(["git", "commit", "-m", message], cwd=results_dir)
     if result.returncode != 0:
