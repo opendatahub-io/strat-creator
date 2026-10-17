@@ -76,7 +76,25 @@ Read operations support two modes:
 
 ### Write Operations
 
-Not yet implemented for strat-creator. Strategy submission to Jira will be added as a future skill.
+Use the versioned Python write helpers. Cloning, links, field updates, comments
+and attachments reconcile their existing effects before publication. Pipeline
+write intent lives in `tmp/strat-effects/`, separate from Claude's agent journal.
+Preserve it on retries; an uncertain absent write stops for reconciliation.
+Never substitute an MCP mutation or raw POST after a helper error. Use
+`scripts/publish_review.py` for the composed review's summary, attachment and
+numeric verdict labels. Jira ownership labels are recovery guards, not atomic
+distributed locks; foreign or multiple owners stop work and cleanup.
+
+### Freshness on recovery
+
+The S1 host records `strat-freshness-v1` before agent work. Same-run reuse and
+writes require unchanged code/Skills/instructions, pinned architecture files,
+prepared parameters, live RFE fields/comments, staff input and recorded artifact
+identity. Changed or unverifiable inputs stop the run and preserve its work and
+mutation intent. Do not rewrite the baseline or clear progress to bypass this.
+A later run may skip refinement/push only with matching prior provenance and
+live published-strategy read-back. Legacy progress requires refinement again.
+Launch a fresh Workflow by name; native `resumeFromRunId` replay is unsupported.
 
 ## Jira Field Mappings
 
